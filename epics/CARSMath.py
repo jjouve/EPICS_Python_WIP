@@ -1,29 +1,48 @@
+#  This module contains miscellaneous math functions
+#
+#  Author:  Mark Rivers
+#  Created: Sept. 16, 2002
+#  Modifications:
+
 import Numeric
 import LinearAlgebra
 
 ############################################################
 def polyfitw(x, y, w, ndegree, return_fit=0):
    """
-   PURPOSE:
-      Perform a least-square polynomial fit with optional error estimates.
-   CALLING SEQUENCE:
-      Result = polyfitw(X, Y, W, NDegree, return_fit=0)
-   INPUTS:
-      X: The independent variable vector.
-      Y: The dependent variable vector.  This vector should be the same 
+   Performs a weighted least-squares polynomial fit with optional error estimates.
+
+   Inputs:
+      x: 
+         The independent variable vector.
+
+      y: 
+         The dependent variable vector.  This vector should be the same 
          length as X.
-      W: The vector of weights.  This vector should be same length as 
+
+      w: 
+         The vector of weights.  This vector should be same length as 
          X and Y.
-      NDegree: The degree of polynomial to fit.
-   OUTPUTS:
-      If return_fit==0 (the default) then POLYFITW returns only C, a vector of 
-      coefficients of length NDegree+1.
-      If return_fit!=0 then POLYFITW returns a tuple (C, Yfit, Yband, Sigma, A)
-         Yfit:  The vector of calculated Y's.  Has an error of + or - Yband.
-         Yband: Error estimate for each point = 1 sigma.
-         Sigma: The standard deviation in Y units.
-         A:     Correlation matrix of the coefficients.
-   MODIFICATION HISTORY:
+
+      ndegree: 
+         The degree of polynomial to fit.
+
+   Outputs:
+      If return_fit==0 (the default) then polyfitw returns only C, a vector of 
+      coefficients of length ndegree+1.
+      If return_fit!=0 then polyfitw returns a tuple (c, yfit, yband, sigma, a)
+         yfit:  
+            The vector of calculated Y's.  Has an error of + or - Yband.
+
+         yband: 
+            Error estimate for each point = 1 sigma.
+
+         sigma: 
+            The standard deviation in Y units.
+
+         a: 
+            Correlation matrix of the coefficients.
+
    Written by:   George Lawrence, LASP, University of Colorado,
                  December, 1981 in IDL.
                  Weights added, April, 1987,  G. Lawrence
@@ -73,8 +92,32 @@ def polyfitw(x, y, w, ndegree, return_fit=0):
 
 ############################################################
 def fit_gaussian(chans, counts):
-   # Fits a peak to a Gaussian using a linearizing method
-   # Returns centroid and fwhm in channels
+   """
+   Fits a peak to a Gaussian using a linearizing method
+   Returns (amplitude, centroid, fwhm).
+   Inputs:
+      chans:
+         An array of x-axis coordinates, typically channel numbers
+
+      counts:
+         An array of y-axis coordinates, typically counts or intensity
+
+   Outputs:
+      Returns a tuple(amplitude, centroid, fwhm)
+      amplitude:
+         The peak height of the Gaussian in y-axis units
+      centroid:
+         The centroid of the gaussian in x-axis units
+
+      fwhm:
+         The Full Width Half Maximum (FWHM) of the fitted peak
+
+   Method:
+      Takes advantage of the fact that the logarithm of a Gaussian peak is a
+      parabola.  Fits the coefficients of the parabola using linear least
+      squares.  This means that the input Y values (counts)  must not be 
+      negative.  Any values less than 1 are replaced by 1.
+   """
    center = (chans[0] + chans[-1])/2.
    x = Numeric.asarray(chans, Numeric.Float)-center
    y = Numeric.log(Numeric.clip(counts, 1, max(counts)))
