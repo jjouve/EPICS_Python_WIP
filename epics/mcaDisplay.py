@@ -13,6 +13,8 @@ Modifications:
       - Use MCA_SETTINGS environment variable, and mca.settings file
         in current directory, in that order as location of settings.
       - Remember MCA detector name and use it as default
+   Sept. 26, 2002 MLR
+      - Fixed bugs in the "Add Peaks" and "Add ROIs" functions of JCPDS.
 """
 import os
 import math
@@ -1209,7 +1211,7 @@ class mcaDisplay:
          self.lmarker(cursor-1)
          self.rmarker(cursor+1)
       if (fit != None):
-         self.fit = fit
+         self.peak_fit = fit
       if (get_cursor != None):
          return self.display.cursor
 
@@ -1895,9 +1897,9 @@ class mcaDisplayJcpds:
    ############################################################
    def two_theta(self):
       two_theta = float(self.widgets.pressure.get())
-      calibration = self.display.background.mca.get_calibration()
+      calibration = self.display.foreground.mca.get_calibration()
       calibration.two_theta = two_theta
-      self.display.background.mca.set_calibration(calibration)
+      self.display.foreground.mca.set_calibration(calibration)
       self.display.draw_jcpds()
 
    ############################################################
@@ -1906,7 +1908,7 @@ class mcaDisplayJcpds:
       npeaks = min(len(refl), self.display.MAX_ROIS)
       for i in range(npeaks):
          r = refl[i]
-         chan = self.display.background.mca.d_to_channel(r.d)
+         chan = self.display.foreground.mca.d_to_channel(r.d)
          if (chan > 20) and (chan < self.display.foreground.nchans-21):
             left = chan-20
             right = chan+20
@@ -1922,18 +1924,19 @@ class mcaDisplayJcpds:
       self.display.foreground.roi = self.display.foreground.mca.get_rois()
       self.display.foreground.nrois = len(self.display.foreground.roi)
       self.display.show_roi(0)
+      self.display.update_spectrum(rescale=1)
 
    ############################################################
    def add_peaks(self):
-      relf = self.display.file.jcpds.get_reflections()
+      refl = self.display.file.jcpds.get_reflections()
       if (len(refl) == 0): return
-      peaks = self.display.fit.peaks
+      peaks = self.display.peak_fit.peaks
       for r in refl:
          new_peak = Mca.McaPeak()
          chan = self.display.foreground.mca.d_to_channel(r.d)
          energy = self.display.foreground.mca.channel_to_energy(chan)
          new_peak.initial_energy = energy
-         label=self.widgets.label.get()
+         label=self.widgets.material.get()
          label = label + ' ' + str(r.h) + str(r.k) + str(r.l)
          new_peak.label = label
          # Make a reasonble estimate of initial FWHM
@@ -1941,9 +1944,9 @@ class mcaDisplayJcpds:
          new_peak.energy_flag=1
          new_peak.fwhm_flag=1
          peaks.append(new_peak)
-         tkMessageBox.showinfo(title='mcaDisplayJCPDS',
-                               message = 'Added ' + str(len(refl)) +
-                               ' peaks to the peak list')
+      tkMessageBox.showinfo(title='mcaDisplayJCPDS',
+                            message = 'Added ' + str(len(refl)) +
+                            ' peaks to the peak list')
 
    ############################################################
    def commands(self, button):
