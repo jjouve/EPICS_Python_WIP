@@ -1,15 +1,39 @@
+"""
+Support for Multi-Element Detectors (Med).
+
+Author:        Mark Rivers
+Created:       Sept. 18, 2002.  Based on earlier IDL code.
+Modifications:
+"""
 import Mca
 import Numeric
 import spline
 
 #########################################################################
 class Med(Mca.Mca):
+   """
+   The MED class is basically a collection of Mca objects.
+   
+   This class is device-independent.
+   
+   Its methods generally simply apply the Mca class methods to each Mca object
+   in the collection. The Med class itself is most commonly used for reading
+   data from disk files. More importantly, this class is the superclass of the
+   epicsMed class.
+   """
+
    def __init__(self, n_detectors=16, file=None):
       """
       Initialization code for creating a new Med object.
-      m = Med(n_detectors=16)
-      n_detectors:  The number of detectors (Mca objects) in this MED.
-                    The default is 16.
+
+      Keywords:
+         n_detectors:
+            The number of detectors (Mca objects) in the Med.
+
+         file:
+            The name of a disk file to read into the Med after it is created.
+            The number of detectors in the Med will be changed if the number of
+            Mca objects in the disk file is different from the Med.
       """
       Mca.Mca.__init__(self)  # Invoke base class initialization
       self.n_detectors = n_detectors
@@ -21,9 +45,13 @@ class Med(Mca.Mca):
    #########################################################################
    def initial_calibration(self, energy):
       """
-      This function performs an initial calibration for each Mca in the Med.
-      med.initial_calibration(energy)
-      energy = The energy of the largest peak in the spectrum
+      Performs an initial energy calibration for each Mca in the Med.
+
+      Inputs:
+         energy:
+            The energy of the largest peak in the spectrum.
+            
+      See the documentation for Mca.initial_calibration() for more information.
       """
       # Read the data first in case this is a hardware Mca
       junk = self.get_data()
@@ -33,10 +61,14 @@ class Med(Mca.Mca):
    #########################################################################
    def final_calibration(self, peaks):
       """
-      This function performs a final calibration for each Mca in the Med.
-      med.final_calibration(peaks)
-      peaks = A list of McaPeak objects. This array is typically read from a
-              disk file with function Mca.read_peaks().
+      Performs a final energy calibration for each Mca in the Med.
+
+      Inputs:
+         peaks:
+            A list of McaPeak objects. This list is typically read from a
+            disk file with function Mca.read_peaks().
+            
+      See the documentation for Mca.final_calibration() for more information.
       """
       # Read the data first in case this is a hardware Mca
       junk = self.get_data()
@@ -47,6 +79,7 @@ class Med(Mca.Mca):
    def get_energy(self):
       """
       Returns a list of energy arrays, one array for each Mca in the Med.
+      See the documentation for Mca.get_energy() for more information.
       """
       energy = []
       for mca in self.mcas:
@@ -57,7 +90,6 @@ class Med(Mca.Mca):
    def get_mcas(self):
       """
       Returns a list of Mca objects from the Med.
-      mca = med.get_mcas()
       """
       return self.mcas
 
@@ -78,13 +110,14 @@ class Med(Mca.Mca):
       This procedure sets the calibration parameters for the Med.
       The calibration information is contained in an object or list of 
       objects of type McaCalibration.
-      med.set_calibration(calibration)
-      INPUTS:
-         calibration:  A single object or a list of objects of type 
-                   McaCalibration containing the calibration parameters for each Mca.
-                   If a single object is passed then this is written to 
-                   each Mca.  If a list of objects is passed then 
-                   calibration[i] is written to Mca[i].
+      
+      Inputs:
+         calibration:
+            A single object or a list of objects of type McaCalibration
+            containing the calibration parameters for each Mca.
+            If a single object is passed then this is written to each Mca.
+            If a list of objects is passed then calibration[i] is written to
+            Mca[i].
       """
       if (isinstance(calibration, Mca.McaCalibration)):
          for mca in self.mcas:
@@ -97,14 +130,15 @@ class Med(Mca.Mca):
    #########################################################################
    def get_elapsed(self):
       """
-      PURPOSE:
-         This function returns the elapsed parameters for the MED.
-         The elapsed information is contained in an array of structures of type
-         McaElapsed.
-      OUTPUTS:
-         This function returns a list of structures of type McaElapsed.
-      PROCEDURE:
-         This function simply invokes MCA::GET_ELAPSED for each MCA in the MED
+      Returns the elapsed parameters for the Med.
+      The elapsed information is contained in a list of structures of type
+      McaElapsed.
+      
+      Outputs:
+         Returns a list of structures of type McaElapsed.
+         
+      Procedure:
+         This function simply invokes Mca.get_elapsed for each Mca in the Med
          and stores the results in the returned list.
       """
       elapsed = []
@@ -115,16 +149,16 @@ class Med(Mca.Mca):
    #########################################################################
    def set_elapsed(self, elapsed):
       """
-      This procedure set the elapsed parameters for the Med.
+      Sets the elapsed parameters for the Med.
       The elapsed information is contained in an object or list of 
-      objects of type MCA_ELAPSED.
-      med.set_elapsed(elapsed)
-      INPUTS:
-         Elapsed:  A single structure or an array of structures of type 
-                   MmcaElapsed containing the elapsed parameters for each Mca.
-                   If a single object is passed then this is written to 
-                   each Mca.  If a list of objects is passed then 
-                   elapsed[i] is written to Mca[i].
+      objects of type McaElapsed.
+
+      Inputs:
+         elapsed:
+            A single structure or a list of structures of type McaElapsed
+            containing the elapsed parameters for each Mca.
+            If a single object is passed then this is written to each Mca.
+            If a list of objects is passed then elapsed[i] is written to Mca[i].
       """
       if (isinstance(elapsed, Mca.McaElapsed)):
          for mca in self.mcas:
@@ -137,14 +171,15 @@ class Med(Mca.Mca):
    #########################################################################
    def get_presets(self):
       """
-      PURPOSE:
-         This function returns the preset parameters for the MED.
-         The elapsed information is contained in an array of structures of type
-         McaPresets.
-      OUTPUTS:
-         This function returns a list of structures of type McaPresets.
-      PROCEDURE:
-         This function simply invokes Mca.GetPresets() for each Mca in the Med
+      Returns the preset parameters for the Med.
+      The preset information is contained in a list of objects of type
+      McaPresets.
+      
+      Outputs:
+         Returns a list of structures of type McaPresets.
+         
+      Procedure:
+         This function simply invokes Mca.get_presets() for each Mca in the Med
          and stores the results in the returned list.
       """
       presets = []
@@ -158,13 +193,13 @@ class Med(Mca.Mca):
       This procedure set the preset parameters for the Med.
       The elapsed information is contained in an object or list of 
       objects of type McaPresets.
-      med.set_presets(presets)
-      INPUTS:
-         Presets:  A single object or a list of objects of type 
-                   McaPresets containing the preset parameters for each Mca.
-                   If a single object is passed then this is written to 
-                   each Mca.  If a list of objects is passed then 
-                   presets[i] is written to Mca[i].
+
+      Inputs:
+         presets:
+            A single object or a list of objects of type McaPresets containing
+            the preset parameters for each Mca.
+            If a single object is passed then this is written to each Mca.
+            If a list of objects is passed then presets[i] is written to Mca[i].
       """
       if (isinstance(presets, Mca.McaPresets)):
          for mca in self.mcas:
@@ -177,9 +212,11 @@ class Med(Mca.Mca):
    def get_rois(self):
       """
       Returns the region-of-interest information for each Mca in the Med.
-      The ROI information is contained in a list of lists of McaRoi objects.
-      The length of the outer list is self.n_detectors, the length of the list
-      for each detector is the number of ROIs defined for that detector.
+
+      Outputs:
+         Returns a list of list of lists of McaRoi objects.
+         The length of the outer list is self.n_detectors, the length of the
+         list for each Mca is the number of ROIs defined for that Mca.
       """
       rois = []
       for mca in self.mcas:
@@ -190,8 +227,12 @@ class Med(Mca.Mca):
    def get_roi_counts(self, background_width=1):
       """
       Returns the net and total counts for each Roi in each Mca in the Med.
-      (total, net) = med.get_roi_counts()
-      total and net are lists of lists of the counts in each Roi.
+
+      Outputs:
+         Returns a tuple (total, net).  total and net are lists of lists
+         containing the total and net counts in each ROI.  The length of the
+         outer list is self.n_detectors, the length of the total and net lists
+         list for each Mca is the number of ROIs defined for that Mca.
       """
       total = []
       net = []
@@ -207,12 +248,12 @@ class Med(Mca.Mca):
       This procedure sets the ROIs for the Med.
       The elapsed information is contained in a list of McaRoi objects,
       or list of such lists.
-      med.set_rois(rois)
-      INPUTS:
-         rois:  A single list or a nested list of objects McaROI objects.
-                If a single list is passed then this is written to 
-                each Mca.  If a list of lists is passed then 
-                rois[i][*] is written to Mca[i].
+
+      Inputs:
+         rois:
+            A single list or a nested list of objects McaROI objects.
+            If a single list is passed then this is written to each Mca.
+            If a list of lists is passed then rois[i][*] is written to Mca[i].
       """
       if (len(rois) <= 1):
          for mca in self.mcas:
@@ -225,9 +266,10 @@ class Med(Mca.Mca):
    def add_roi(self, roi, energy=0):
       """
       This procedure adds an ROI to each Mca in the Med.
-      med.add_roi(roi)
-      INPUTS:
-         roi:  A single ROI to be added.
+
+      Inputs:
+         roi:
+            A single McaROI to be added.
       """
       for mca in self.mcas:
          mca.add_roi(roi, energy=energy)
@@ -235,9 +277,10 @@ class Med(Mca.Mca):
    #########################################################################
    def delete_roi(self, index):
       """
-      This procedure deletes the ROI a position "index" from each Mca in the Med.
-      med.delete_rois(index)
-      INPUTS:
+      This procedure deletes the ROI at position "index" from each Mca in the
+      Med.
+
+      Inputs:
          index:  The index number of the ROI to be deleted.
       """
       for mca in self.mcas:
@@ -248,16 +291,19 @@ class Med(Mca.Mca):
       """
       This procedure copies the ROIs defined for one Mca in the Med to all of
       the other Mcas.
-      med.copy_rois(source_mca=0, energy=0)
-      INPUTS:
-         source_mca:  The index number of the Mca from which the ROIs are to
-                      be copied.  This number ranges from 1 to self.n_detectors.
-                      The default is the first Mca (index=0).
-      KEYWORD PARAMETERS:
-         energy: Set this keyword if the ROIs should be copied by their position
-                 in energy rather than in channels. This is very useful when 
-                 copying ROIs when the calibration parameters for each Mca in 
-                 the Med are not identical.
+
+      Inputs:
+         source_mca:
+            The index number of the Mca from which the ROIs are to
+            be copied.  This number ranges from 0 to self.n_detectors-1.
+            The default is the first Mca (index=0).
+            
+      Keywords:
+         energy:
+            Set this keyword if the ROIs should be copied by their position
+            in energy rather than in channels. This is very useful when 
+            copying ROIs when the calibration parameters for each Mca in 
+            the Med are not identical.
       """
       rois = self.mcas[source_mca].get_rois(energy=energy)
       self.set_rois(rois, energy=energy)
@@ -266,21 +312,25 @@ class Med(Mca.Mca):
    def get_data(self, total=0, align=0):
       """
       Returns the data from each Mca in the Med as a 2-D Numeric array
-      data = med.get_data(total=0, align=0)
-      KEYWORD PARAMETERS:
-         total:  Set this keyword to return the sum of the spectra from all
-                 of the Mcas.
-         align:  Set this keyword to return spectra which have been shifted and
-                 and stretched to match the energy calibration parameters of the
-                 first detector.  This permits doing arithmetic on a
-                 "channel-by-channel" basis. This keyword can be used alone
-                 or together with the TOTAL keyword, in which case the data
-                 are aligned before summing.
-      OUTPUTS:
+      
+      Keywords:
+         total:
+            Set this keyword to return the sum of the spectra from all
+            of the Mcas as a 1-D Numeric array.
+            
+         align:
+            Set this keyword to return spectra which have been shifted and
+            and stretched to match the energy calibration parameters of the
+            first detector.  This permits doing arithmetic on a
+            "channel-by-channel" basis. This keyword can be used alone
+            or together with the TOTAL keyword, in which case the data
+            are aligned before summing.
+            
+      Outputs:
          By default this function returns a long 2-D array of counts dimensioned
          [nchans, self.n_detectors]
-         If the TOTAL keyword is set then the function returns a long 1-D array
-         dimensioned [nchans].
+         If the "total" keyword is set then the function returns a long 1-D
+         array dimensioned [nchans].
       """
       temp = self.mcas[0].get_data()
       nchans = len(temp)
@@ -305,11 +355,12 @@ class Med(Mca.Mca):
    def read_file(self, file, netcdf=0):
       """
       Reads a disk file into an Med object. The file contains the information
-      from the Med object which it makes sense to store permanently, but does not
-      contain all of the internal state information for the Med. ##;
-      med.read_file(file)
-      INPUTS:
-         file:  The name of the disk file to read.
+      from the Med object which it makes sense to store permanently, but does
+      not contain all of the internal state information for the Med.
+
+      Inputs:
+         file:
+            The name of the disk file to read.
       """
       if (netcdf != 0):
          r = Mca.read_netcdf_file(file)

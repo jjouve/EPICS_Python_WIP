@@ -1,3 +1,10 @@
+#   This module provides a number of utility functions for
+#   X-ray fluorescence (XRF)
+#
+#   Author:  Mark Rivers
+#   Created: Sept. 16, 2002
+#   Modifications:
+
 import os
 import exceptions
 class XrfError(exceptions.Exception):
@@ -19,20 +26,18 @@ gamma_dict = None
 
 def atomic_number(symbol):
       """
-      PURPOSE:
-      This function returns the atomic number of an element 
+      Returns the atomic number of an element, given its atomic symbol 
   
-      CALLING SEQUENCE:
-         Result = ATOMIC_NUMBER(Symbol)
- 
-      INPUTS:
-         Symbol: The atomic symbol of the element whose atomic number is being
-                 requested.  This is a 1 or 2 character string, e.g. 'H', 'Si',
-                 etc.  It is case insensitive and leading or trailing blanks
-                 are ignorred.
-      OUTPUTS:
+      Inputs:
+         symbol:
+            The atomic symbol of the element whose atomic number is being
+            requested.  This is a 1 or 2 character string, e.g. 'H', 'Si',
+            etc.  It is case insensitive and leading or trailing blanks
+            are ignorred.
+            
+      Outputs:
          This function returns the atomic number of the input element.  If an
-        Symbol is an invalid atomic symbol then the function returns 0.
+         invalid atomic symbol is input then the function returns 0.
       """
       s = symbol.split()[0].upper()
       for i in range(len(atomic_symbols)):
@@ -42,66 +47,61 @@ def atomic_number(symbol):
 
 def atomic_symbol(z):
       """
-      PURPOSE:
-         This function returns the atomic symbol of an element 
+      This function returns the atomic symbol of an element, given its atomic
+      number.
+      
+      Inputs:
+         z:
+            The atomic number of the element whose atomic symbol is being
+            requested.  
 
-      CALLING SEQUENCE:
-         Result = ATOMIC_SYMBOL(Z)
-
-      INPUTS:
-         Z:  The atomic number of the element whose atomic symbol is being
-             requested.  
-
-       OUTPUTS:
+       Outputs:
           This function returns the atomic symbol of the input element as a
           string.  If Z is an invalid atomic number then the function returns 
-          None
+          None.
       """
       if (z > 0) and (z <= len(atomic_symbols)): return(atomic_symbols[z-1])
       return None
 
 
-def lookup_xrf_line(in_str):
+def lookup_xrf_line(xrf_line):
    """
-   PURPOSE
-      This function returns the energy in keV for a particular x-ray
-      fluorescence line.
+   This function returns the energy in keV for a particular x-ray
+   fluorescence line.
 
-   CALLING SEQUENCE:
-      Result = LOOKUP_XRF_LINE(XRF_Line)
-
-   INPUTS:
-      XRF_LINE: A string of the form 'Element Line', where Element is an
-      atomic symbol, and Line is an acronym for a fluorescence line.
-      Both Element and Line are case insensitive.  There must be a space
-      between Element and Line.
-      The valid lines are
-          ka  - K-alpha (weighted average of ka1 and ka2)
-          ka1 - K-alpha 1
-          ka2 - K-alpha 2
-          kb  - K-beta (weighted average of kb1 and kb2)
-          kb1 - K-beta 1
-          kb2 - K-beta 2
-          la1 - L-alpha 1
-          lb1 - L-beta 1
-          lb2 - L-beta 2
-          lg1 - L-gamma 1
-          lg2 - L-gamma 2
-          lg3 - L-gamma 3
-          lg4 - L-gamma 4
-          ll  - L-eta
+   Inputs:
+      xrf_line:
+         A string of the form 'Element Line', where Element is an
+         atomic symbol, and Line is an acronym for a fluorescence line.
+         Both Element and Line are case insensitive.  There must be a space
+         between Element and Line.
+         The valid lines are
+             ka  - K-alpha (weighted average of ka1 and ka2)
+             ka1 - K-alpha 1
+             ka2 - K-alpha 2
+             kb  - K-beta (weighted average of kb1 and kb2)
+             kb1 - K-beta 1
+             kb2 - K-beta 2
+             la1 - L-alpha 1
+             lb1 - L-beta 1
+             lb2 - L-beta 2
+             lg1 - L-gamma 1
+             lg2 - L-gamma 2
+             lg3 - L-gamma 3
+             lg4 - L-gamma 4
+             ll  - L-eta
 
       Examples of XRF_Line:
           'Fe Ka'  - Fe k-alpha
           'sr kb2' - Sr K-beta 2
           'pb lg2' - Pb L-gamma 2
 
-   OUTPUTS:
+   Outputs:
       This function returns the fluoresence energy of the specified line.
       If the input is invalid, e.g. non-existent element or line, then the
       function returns None
 
-   RESTRICTIONS:
+   Restrictions:
       This function uses the environment variable XRF_PEAK_LIBRARY to locate
       the file containing the database of XRF lines.  This environment
       variable must be defined to use this function.  On Unix systems
@@ -111,14 +111,17 @@ def lookup_xrf_line(in_str):
       On Windows NT systems this is typically done with the
               Settings/Control Panel/System/Environment control.
 
-   PROCEDURE:
+      If lookup_xrf_line() encounters an error in resolving the environment
+      variable or in reading the file it raises an XrfError exception.
+
+   Procedure:
       The first time this function is called it reads in the table from the
       file pointed to by the environment variable.  On all calls it looks
-      up the element using function ATOMIC_NUMBER and searches for the
+      up the element using function atomic_number() and searches for the
       specified line in the table.  It returns 0. if the element or line
       are invalid.
 
-   EXAMPLE:
+   Examples:
       energy = lookup_xrf_line('Fe Ka')  ; Look up iron k-alpha line
       energy = lookup_xrf_line('Pb lb1') ; Look up lead l-beta 1 line
    """
@@ -153,38 +156,34 @@ def lookup_xrf_line(in_str):
          raise XrfError, 'Error reading XRF_PEAK_LIBRARY file'
 
    try:
-      words = in_str.split()
+      words = xrf_line.split()
       return xrf_dict[words[0].upper()][words[1].upper()]
    except:
       return None
 
 
-def lookup_gamma_line(in_str):
+def lookup_gamma_line(gamma_line):
    """
-   PURPOSE:
-      This function returns the energy in keV for a particular gamma
-      emmission line.
+   Returns the energy in keV for a particular gamma emmission line.
 
-   CALLING SEQUENCE:
-      Result = lookup_gamma_line(Gamma_Line)
+   Inputs:
+      gamma_Line:
+         A string of the form 'Isotope Line', where Isotope is a
+         the symbol for a radioactive isotope, and Line is an index of the form
+         g1, g2, ... gn.
+         Both Isotope and Line are case insensitive.  There must be a space
+         between Isotope and Line.
 
-   INPUTS:
-      Gamma_Line: A string of the form 'Isotope Line', where Isotope is a
-      the symbol for a radioactive isotope, and Line is an index of the form
-      g1, g2, ... gn.
-      Both Isotope and Line are case insensitive.  There must be a space
-      between Isotope and Line.
+         Examples of Gamma_Line:
+            'Cd109 g1'  - 88 keV line of Cd-109
+            'co57 g2'   - 122 keV line of Co-57
 
-      Examples of Gamma_Line:
-          'Cd109 g1'  - 88 keV line of Cd-109
-          'co57 g2'   - 122 keV line of Co-57
-
-   OUTPUTS:
+   Outputs:
       This function returns the gamma energy of the specified line.
       If the input is invalid, e.g. non-existent isotope or line, then the
       function returns 0.
 
-   RESTRICTIONS:
+   Restrictions:
        This function only knows about a few isotopes at present.  It is
        intended for use with common radioactive check sources.  It is easy to
        add additional isotopes and gamma lines to this function as needed.
@@ -194,8 +193,8 @@ def lookup_gamma_line(in_str):
            'CO57 G3' = 136.4743
            'CD109 G1'= 88.04
 
-   EXAMPLE:
-       energy = LOOKUP_GAMMA_LINE('Co57 g1')  ; Look up 14 keV line of Co-57
+   Example:
+       energy = lookup_gamma_line('Co57 g1')  ; Look up 14 keV line of Co-57
    """
    global gamma_dict
    if (gamma_dict == None):
@@ -208,14 +207,25 @@ def lookup_gamma_line(in_str):
       gamma_dict['CD109']['G1'] = 88.04
 
    try:
-      words = in_str.split()
+      words = gamma_line.split()
       return gamma_dict[words[0].upper()][words[1].upper()]
    except:
       return None
 
 
 def increment_filename(old_file):
-   # Increment the file extension number if it is numeric
+   """
+   Increments the file extension if it is numeric.  It preserves the number of
+   characters in the extension.
+   
+   Examples:
+      print increment_filename('test.001')
+         test.002
+      print increment_filename('test')
+         test
+      print increment_filename('file.1')
+         file.2
+   """
    dot = old_file.rfind('.')
    if (dot == -1): return old_file
    if (dot+1 == len(old_file)): return old_file

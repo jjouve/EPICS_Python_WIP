@@ -1,10 +1,27 @@
 """
-This module provides a wrapper around the Pmw.Blt.Graph widget.  It has both a
-standalone plotting widget (BltPlot.BltPlot), GUI routines to configure the
-axes, elements, markers, etc., and routines to save and restore settings.
+This module provides enhancements to the Pmw.Blt.Graph widget.  It has the
+following main features:
+
+- A standalone plotting widget, BltPlot.BltPlot.  This widget has menus to:
+   - Configure all of the plot characteristics
+   - Save and restore the plot settings and data
+   - Print the plot to a file or printer
+  It has methods (BltPlot.plot and BltPlot.oplot) to create a new plot,
+  to overplot more data, etc.  It is designed to provide a rough emulation of
+  the command line plotting capabilities of IDL.
+   
+- GUI routines to configure all of the plot characteristics, such as axes,
+  markers, legends, etc..  These routines work with any Pmw.Blt.Graph instance so
+  they can be used from the standalone plotting widget in this package
+  (BltPlot.BltPlot) or from any application that uses the Pmw.Blt.Graph widget.
+
+- Routines to save and restore plot settings and data.
+
+Author:          Mark Rivers
+Created:         Sept. 18, 2002
+Modifications:
 """
 from Tkinter import *
-import Tkinter
 import tkColorChooser
 import tkFileDialog
 import Pmw
@@ -14,9 +31,43 @@ import myTkTop
 
 ########################################################################
 class BltPlot:
+   """
+   This class is used to build a standdalone plotting widget. It is designed
+   to provide a rough emulation of the command line plotting capabilities of
+   IDL.
+   This widget has menus to:
+      - Configure all of the plot characteristics
+      - Save and restore the plot settings and data
+      - Print the plot to a file or printer
+   The configuration menus can also be accessed by double-clicking on the
+   appropriate location of the plot, for example on the X axis.
+   
+   The only "public" functions are the constuctor (__init__) and the plot and
+   oplot functions.
+
+   The following example creates a plot of sin(x) and cos(x) with a legend:
+   >>> from BltPlot import *
+   >>> import Numeric
+   >>> x = Numeric.arange(1000)/100.
+   >>> y1 = Numeric.sin(x)
+   >>> y2 = Numeric.cos(x)
+   >>> p = BltPlot(x, y1, label='sin(x)', legend=1)
+   >>> p.oplot(x, y2, label='cos(x)')
+   """
 
    ########################################################################
    def __init__(self, xdata=None, ydata=None, exit_callback=None, **kw):
+      """
+      Creates a new plot widget.  After the plot widget is created it invokes
+      the plot() function.  It accepts all of the parameters and keywords
+      of the plot() function.
+      It takes the following addtional keyword:
+         exit_callback:
+            This is an optional function that will be called when the BltPlot
+            instance is destroyed.  The callback function will be called as:
+               exit_callback(graph)
+            where graph is the Pmw.Blt.Graph instance.
+      """
       class widgets:
          pass
       self.exit_callback=exit_callback
@@ -29,10 +80,6 @@ class BltPlot:
       self.widgets.mbar = mbar = Pmw.MenuBar(frame)
       mbar.pack(fill=X)
 
-      # There is a bug (???) in Pmw.Blt, it won't create a new graph if
-      # Tkinter.Tk() has been called since the last time a graph was created.
-      # Work around the problem for now by reloading Pmw.Blt.
-      #reload(Pmw.Blt)
       self.graph = t = Pmw.Blt.Graph(self.widgets.top)
       t.pack(expand=YES, fill=BOTH)
 
@@ -65,12 +112,14 @@ class BltPlot:
 
    ########################################################################
    def exit(self):
+      """ Private method """
       if (self.exit_callback != None):
          self.exit_callback(self.graph)
       self.widgets.top.destroy()
 
    ########################################################################
    def rebuild_menus(self):
+      """ Private method """
       mbar = self.widgets.mbar
       mbar.deletemenu('Axis')
       mbar.addcascademenu('Configure', 'Axis')
@@ -93,6 +142,7 @@ class BltPlot:
 
    ########################################################################
    def menu_save_as(self):
+      """ Private method """
       file = tkFileDialog.asksaveasfilename(parent=self.widgets.top,
                                 title='Settings file',
                                 filetypes=[('Save files','*.sav'),
@@ -103,10 +153,12 @@ class BltPlot:
 
    ########################################################################
    def menu_save(self):
+      """ Private method """
       BltSaveSettings(self.graph, self.settings_file)
 
    ########################################################################
    def menu_restore(self):
+      """ Private method """
       file = tkFileDialog.askopenfilename(parent=self.widgets.top,
                                 title='Settings file',
                                 filetypes=[('Save files','*.sav'),
@@ -124,6 +176,59 @@ class BltPlot:
             ytickfont=('Helvetica','10'), ytitlefont=('Helvetica','11','bold'),
             symbol="", linewidth=1, pixels=7, smooth="linear", color='black',
             label="line1", legend=0):
+      """
+      Creates a new plot, i.e. deletes any existing elements in the graph and
+      adds the new data element.
+
+      Inputs:
+         xdata:
+            A sequence (e.g. array, list, tuple) of the X axis coordinates of
+            the data to be plotted.
+            If xdata is input but ydata is not, then xdata are copied to ydata,
+            i.e. xdata are the Y values.  In this case the X values are created
+            as a simple sequence with xdata = tuple(range(len(ydata))).
+            Pmw.Blt.Graph requires the xdata and ydata sequences to be tuples, so
+            it is most efficient to pass them this way.  They will be
+            converted to tuples if they are another type.
+
+         ydata:
+            A sequence (e.g. array, list, tuple) of the Y axis coordinates of
+            the data to be plotted.
+
+      Keywords:
+         Most of the following keywords are simply the names of Pmw.Blt.Graph
+         configuration parameters.  The user should consult the Pmw.Blt.Graph
+         documentation for details.
+         
+         window_title:   The title in the title bar of the window.
+         title:          The title of the graph, placed just above the graph
+         background:     The color of the window background
+         plotbackground: The color of the plot background
+         xmin:           The minimum X value. Default is auto-scale.
+         xmax:           The maximum X value. Default is auto-scale.
+         xtitle:         The title of the X axis.
+         xlog:           1 for log scale, 0 for linear scale.
+         xtickfont:      The font for the X axis tick labels
+         xtitlefont:     The font for the X axis title
+         ymin:           The minimum Y value.  Default is auto-scale.
+         ymax:           The maximum Y value. Default is auto-scale.
+         ytitle:         The title of the Y axis.
+         ylog:           1 for log scale, 0 for linear scale.
+         ytickfont:      The font for the Y axis tick labels
+         ytitlefont:     The font for the Y axis title
+         symbol:         The plot symbol, e.g. 'circle', 'square'.
+                         Default is no symbol.
+         linewidth:      The width of the lines connecting the data points
+         pixels:         The size of the plot symbols in pixels.
+         smooth:         The smoothing algorithm for the line seqments
+                         connecting data points.
+         color:          The color of the plot symbols and line seqments.
+         label:          A label for this graph element.  This is the string
+                         that will appear in the legend and which is used
+                         to configure this graph element.  Default='line1'.
+         legend:         1=show legend, 0=hide legend.
+         
+      """
 
       self.widgets.top.title(window_title)
       g = self.graph
@@ -161,6 +266,27 @@ class BltPlot:
    ########################################################################
    def oplot(self, xdata=None, ydata=None, symbol="", linewidth=1, pixels=7,
              smooth="linear", color='black', label="line2"):
+      """
+      Plots an additional element on the existing plot, i.e. does not delete
+      any existing elements in the graph.
+
+      Inputs:
+         Same as plot, described above.
+
+      Keywords:
+         Accepts a subset of the keywords used by plot(), described above.
+
+         symbol:         The plot symbol, e.g. 'circle', 'square'.
+                         Default is no symbol.
+         linewidth:      The width of the lines connecting the data points
+         pixels:         The size of the plot symbols in pixels.
+         smooth:         The smoothing algorithm for the line seqments
+                         connecting data points.
+         color:          The color of the plot symbols and line seqments.
+         label:          A label for this graph element.  This is the string
+                         that will appear in the legend and which is used
+                         to configure this graph element.
+      """
       if (xdata == None): return
       xdata = tuple(xdata)
       if (ydata == None):
@@ -183,6 +309,7 @@ class BltPlot:
 
    ########################################################################
    def double_click(self, event):
+      """ Private method """
       x = event.x; y=event.y
       g = self.graph
       if g.inside(x, y):
@@ -204,6 +331,7 @@ class BltPlot:
 
    ########################################################################
    def legend_mouse(self, event):
+      """ Private method """
       g = self.graph
       tags = g.element_names()
       if (event.type == '2'):    # KeyPress event
@@ -243,6 +371,7 @@ class BltPlot:
 
    ########################################################################
    def element_mouse(self, event, element):
+      """ Private method """
       g = self.graph
       if (event.type == '4'): # Double click event
          # NEED TO FIGURE OUT HOW TO "EAT" THIS EVENT SO IT DOES NOT GET
@@ -262,9 +391,23 @@ class BltPlot:
 
 ########################################################################
 class BltPrintSetup:
+   """
+   Creates a GUI window to configure the printing parameters of a Pmw.Blt.Graph
+   object.
+   """
 
    ########################################################################
    def __init__(self, graph, command=None):
+      """
+      Inputs:
+         graph:
+            A Pmw.Blt.Graph instance
+
+        command:
+            An optional callback function that will be called each time the
+            printing parameters are modified.  The callback will be called as:
+               command()
+      """
       self.graph=graph
       BltPrintDefaults(graph)
       self.return_command = command
@@ -303,6 +446,7 @@ class BltPrintSetup:
 
    ########################################################################
    def commands(self, button):
+      """ Private method """
       widgets = self.widgets
       graph = self.graph
       configure = graph.postscript_configure
@@ -320,7 +464,7 @@ class BltPrintSetup:
          configure(colormode=widgets['colormode'].getcurselection())
          graph.print_file = widgets['print_file'].get()
          graph.print_command = widgets['print_command'].get()
-         if (self.return_command != None): self.return_command(element)
+         if (self.return_command != None): self.return_command()
       if (button == 'Print') or (button == 'Print to file'):
          graph.postscript_output(graph.file_name)
       if (button == 'Print'):
@@ -330,8 +474,16 @@ class BltPrintSetup:
 
 ########################################################################
 def BltPrintDefaults(graph):
-   # If the graph does not have the "print_command" or "print_file" attributes
-   # then create them
+   """
+   Creates the "print_command" or "print_file" attributes of the Pmw.Blt.Graph
+   object if they do not already exist.  These are used by BltPrint().
+   
+   The first default for "print_command" is a command defined by the
+   environment variable "PRINT_COMMAND".  If this environment variable does
+   not exist, then the default is "lpr " on Unix, and "print " in Windows.
+
+   The default for "print_file" is "Blt.ps".
+   """
    if (hasattr(graph, 'print_command') == 0):
       graph.print_command = os.getenv('PRINT_COMMAND')
       if (graph.print_command == None):
@@ -344,14 +496,36 @@ def BltPrintDefaults(graph):
 
 ########################################################################
 def BltPrint(graph):
+   """
+   Prints the graph on a printer.  Uses the attributes graph.print_command and
+   graph.print_file, which are added to Pmw.Blt.Graph by this BltPlot package.
+   Default values for these attributes are created with BltPrintDefaults(). The
+   attributes can be changed by the user.
+   """
    BltPrintDefaults(graph)
    os.system(graph.print_command + ' ' + graph.print_file)
 
 ########################################################################
 class BltConfigureAxis:
+   """
+   Creates a GUI window to configure an axis of a Pmw.Blt.Graph object.
+   """
 
    ########################################################################
    def __init__(self, graph, axis, command=None):
+      """
+      Inputs:
+         graph:
+            A Pmw.Blt.Graph instance
+
+         axis:
+            The name of the axis, e.g. 'x', 'y', 'x2', 'y2'
+
+         command:
+            An optional callback function that will be called each time the
+            legend is modified.  The callback will be called as:
+               command(axis)
+      """
       self.graph=graph
       self.axis=axis
       self.return_command=command
@@ -394,6 +568,7 @@ class BltConfigureAxis:
 
    ########################################################################
    def commands(self, button):
+      """ Private method """
       widgets = self.widgets
       graph = self.graph
       axis = self.axis
@@ -420,9 +595,22 @@ class BltConfigureAxis:
 
 ########################################################################
 class BltConfigureLegend:
+   """
+   Creates a GUI window to configure the legend of a Pmw.Blt.Graph object.
+   """
 
    ########################################################################
    def __init__(self, graph, command=None):
+      """
+      Inputs:
+         graph:
+            A Pmw.Blt.Graph instance
+
+         command:
+            An optional callback function that will be called each time the
+            legend is modified.  The callback will be called as:
+               command()
+      """
       self.graph=graph
       self.return_command=command
       self.widgets = {}
@@ -457,6 +645,7 @@ class BltConfigureLegend:
 
    ########################################################################
    def commands(self, button):
+      """ Private method """
       widgets = self.widgets
       graph = self.graph
       configure = graph.legend_configure
@@ -477,9 +666,23 @@ class BltConfigureLegend:
 
 ########################################################################
 class BltConfigureGrid:
+   """
+   Creates a GUI window to configure the grid attributes in a Pmw.Blt.Graph
+   object.
+   """
 
    ########################################################################
    def __init__(self, graph, command=None):
+      """
+      Inputs:
+         graph:
+            A Pmw.Blt.Graph instance
+
+         command:
+            An optional callback function that will be called each time the
+            grid is modified.  The callback will be called as:
+               command()
+      """
       self.graph=graph
       self.return_command=command
       self.widgets = {}
@@ -502,6 +705,7 @@ class BltConfigureGrid:
 
    ########################################################################
    def commands(self, button):
+      """ Private method """
       widgets = self.widgets
       graph = self.graph
       configure = graph.grid_configure
@@ -517,9 +721,26 @@ class BltConfigureGrid:
 
 ########################################################################
 class BltConfigureElement:
+   """
+   Creates a GUI window to configure an "element" in a Pmw.Blt.Graph object.
+   """
 
    ########################################################################
    def __init__(self, graph, element, command=None):
+      """
+      Inputs:
+         graph:
+            A Pmw.Blt.Graph instance
+
+         element:
+            The name of the element to configure.
+
+         command:
+            An optional callback function that will be called each time the
+            element is modified.  The callback will be called as:
+               command(element)
+      """
+         
       self.graph=graph
       self.return_command = command
       self.selected_elements = list(graph.element_names(element))
@@ -559,6 +780,7 @@ class BltConfigureElement:
 
    ########################################################################
    def commands(self, button):
+      """ Private method """
       widgets = self.widgets
       graph = self.graph
       configure = graph.element_configure
@@ -581,9 +803,29 @@ class BltConfigureElement:
 
 ########################################################################
 class BltConfigureMarker:
+   """
+   Creates a GUI window to configure one or more markers in a Pmw.Blt.Graph object.
+   """
+
 
    ########################################################################
    def __init__(self, graph, marker, command=None):
+      """
+      Inputs:
+         graph:
+            A Pmw.Blt.Graph instance
+
+         marker:
+            The name of the marker to configure.  The marker name can contain
+            wildcards, in which case all markers matching the pattern will be
+            modified.  Only the name of the first marker will be displayed in
+            the window.
+
+         command:
+            An optional callback function that will be called each time the
+            marker is modified.  The callback will be called as:
+               command(marker)
+      """
       class widgets:
          pass
       self.graph=graph
@@ -637,6 +879,7 @@ class BltConfigureMarker:
 
    ########################################################################
    def commands(self, button):
+      """ Private method """
       widgets = self.widgets
       graph = self.graph
       configure = graph.marker_configure
@@ -665,9 +908,24 @@ class BltConfigureMarker:
 
 ########################################################################
 class BltConfigureGraph:
+   """
+   Creates a GUI window to configure the primary graph attributes in a
+   Pmw.Blt.Graph object.  The attributes include the background colors, title
+   font, relief, etc.
+   """
 
    ########################################################################
    def __init__(self, graph, command=None):
+      """
+      Inputs:
+         graph:
+            A Pmw.Blt.Graph instance
+
+         command:
+            An optional callback function that will be called each time the
+            graph attributes are modified.  The callback will be called as:
+               command()
+      """
       self.graph=graph
       self.return_command = command
       self.widgets = {}
@@ -700,6 +958,7 @@ class BltConfigureGraph:
 
    ########################################################################
    def commands(self, button):
+      """ Private method """
       widgets = self.widgets
       graph = self.graph
       configure = graph.configure
@@ -719,6 +978,7 @@ class BltConfigureGraph:
 ########################################################################
 def menu_entry(self, parent, attribute, label, value, validate=None,
                label_width=20, entry_width=20):
+   """ Private method """
    t = Pmw.EntryField(parent, value=value,
                       labelpos=W, label_text=label, label_width=label_width,
                       label_anchor=E,
@@ -731,6 +991,7 @@ def menu_entry(self, parent, attribute, label, value, validate=None,
 ########################################################################
 def menu_text(self, parent, attribute, label, value, validate=None,
                label_width=20, text_width=20, text_height=3):
+   """ Private method """
    row = Frame(parent); row.pack(anchor=W)
    label = Label(row, anchor=E, text=label, width=label_width);
    label.pack(side=LEFT)
@@ -742,6 +1003,7 @@ def menu_text(self, parent, attribute, label, value, validate=None,
 ########################################################################
 def menu_option(self, parent, attribute, label, items, initial,
                 label_width=20):
+   """ Private method """
    t = Pmw.OptionMenu(parent, items=items, initialitem=initial,
                       labelpos=W, label_text=label, label_width=label_width,
                       label_anchor=E,
@@ -752,6 +1014,7 @@ def menu_option(self, parent, attribute, label, items, initial,
 ########################################################################
 def menu_color(self, parent, attribute, label, value, label_width=20,
                entry_width=20, defcolor=None):
+   """ Private method """
    row = Frame(parent); row.pack(anchor=W, pady=2)
    t = Pmw.EntryField(row, value=value,
                       labelpos=W, label_text=label, label_width=label_width,
@@ -771,6 +1034,7 @@ def menu_color(self, parent, attribute, label, value, label_width=20,
 
 ########################################################################
 def new_color(self, attribute):
+   """ Private method """
    c = self.widgets[attribute].get()
    if (c == ""): c = None
    self.widgets[attribute+'_color'].configure(background=c)
@@ -778,6 +1042,7 @@ def new_color(self, attribute):
 
 ########################################################################
 def ask_color(self, value, attribute, defcolor=None):
+   """ Private method """
    if (value == 'defcolor') and (defcolor != None): value=defcolor
    c = tkColorChooser.askcolor(value, parent=self.graph)
    c = c[1]
@@ -788,6 +1053,9 @@ def ask_color(self, value, attribute, defcolor=None):
 
 ########################################################################
 class BltSettings:
+   """
+   Class used for saving and restoring settings.
+   """
 
    ########################################################################
    def __init__(self):
@@ -796,6 +1064,48 @@ class BltSettings:
 ########################################################################
 def BltGetSettings(graph, main=1, legend=1, grid=1, axes=1,
                    elements=1, data=1, markers=1, postscript=1):
+   """
+   Returns a BltSettings class containing the current settings of the
+   Pmw.Blt.Graph instance.
+
+   This function is used by BltSaveSettings(), but it could be called by other
+   applications that use different methods to save and restore settings.
+
+   Inputs:
+      graph:
+         A Pmw.Blt.Graph instance
+
+   Keywords:
+      The following keywords control which settings are returned in the
+      BltSettings instance.
+      The default for each keyword is 1, meaning that those settings are saved.
+      Set the keyword to 0 to avoid returning those settings.
+
+      main:
+         The main graph settings, i.e. those that are configured with
+         BltConfigureGraph.
+         
+      legend:
+         The legend settings.
+
+      grid:
+         The grid settings.
+
+      axes:
+         The axis settings.
+
+      elements:
+         The element settings, but not including the element data.
+
+      data:
+         The graph data.
+
+      markers:
+         The marker data.
+
+      postscript:
+         The printing settings.
+   """
    s = BltSettings()
    if (main == 1):
       s.graph_config = _get_settings(graph.configure())
@@ -844,6 +1154,7 @@ def BltGetSettings(graph, main=1, legend=1, grid=1, axes=1,
 
 ########################################################################
 def _get_settings(dict):
+   """ Private method """
    t = {}
    for key in dict.keys():
       t[key] = dict[key][-1]
@@ -851,6 +1162,25 @@ def _get_settings(dict):
 
 ########################################################################
 def BltSaveSettings(graph, file, **kw):
+   """
+   Save settings for a Pmw.Blt.Graph object to a file .  Settings are
+   restored with BltRestoreSettings().
+   
+   These settings may or may not include the data itself.
+
+   Inputs:
+      graph:
+         A Pmw.Blt.Graph instance
+
+      file:
+         The name of a file containing the settings saved previously with
+         BltSaveSettings().
+
+   Keywords:
+      Keywords are used to control which settings are saved.  These keywords
+      are simply passed to BltGetSettings().  See the documentation for that
+      function for details.
+   """
    s = apply(BltGetSettings, (graph,), kw)
    fp = open(file, 'w')
    cPickle.dump(s, fp)
@@ -858,6 +1188,18 @@ def BltSaveSettings(graph, file, **kw):
 
 ########################################################################
 def BltLoadSettings(graph, s):
+   """
+   Loads settings to a Pmw.Blt.Graph object from a BltSettings instance.
+   This function is used by BltRestoreSettings(), but it could be called by other
+   applications that use different methods to save and restore settings.
+
+   Inputs:
+      graph:
+         A Pmw.Blt.Graph instance
+
+      s:
+         A BltSettings instance.
+   """
    if (hasattr(s, 'graph_config')):
        _restore_settings(s.graph_config, graph.configure)
    if (hasattr(s, 'legend_config')):
@@ -884,6 +1226,7 @@ def BltLoadSettings(graph, s):
 
 ########################################################################
 def _restore_settings(dict, function, *args):
+   """ Private method """
    for key in dict.keys():
       kw = {key: dict[key]}
       try:
@@ -893,6 +1236,21 @@ def _restore_settings(dict, function, *args):
 
 ########################################################################
 def BltRestoreSettings(graph, file):
+   """
+   Restores settings saved in a file to a Pmw.Blt.Graph object.  Settings are
+   saved with BltSaveSettings().
+   
+   These settings may or may not include the data itself.
+
+   Inputs:
+      graph:
+         A Pmw.Blt.Graph instance
+
+      file:
+         The name of a file containing the settings saved previously with
+         BltSaveSettings().
+
+   """
    fp = open(file, 'r')
    s = cPickle.load(fp)
    BltLoadSettings(graph, s)
