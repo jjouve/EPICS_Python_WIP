@@ -1365,7 +1365,8 @@ class mcaDisplay:
 
    ############################################################
    def open_det(self, background=0):
-      name = tkSimpleDialog.askstring("Open Detector", "Detector name")
+      name = tkSimpleDialog.askstring("Open Detector", "Detector name",
+                                      parent=self.widgets.top)
       if (name != None):
          self.open_detector(name, background=background)
 
