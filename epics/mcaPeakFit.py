@@ -1,3 +1,16 @@
+"""
+GUI window for fitting background and peaks to Mca objects.
+
+Author:
+   Mark Rivers
+
+Created:
+   Sept. 20, 2002
+
+Modifications:
+   Sept 25, 2002  MLR
+      - Changed calls to fit.get_calibration() to fit.update()
+"""
 import copy
 import math
 from Tkinter import *
@@ -40,8 +53,8 @@ class mcaPeakFit:
          self.fit = Mca.McaFit(mca)
       else:
          self.fit = fit
-      # Copy the calibration from the Mca to the fit object
-      self.fit.get_calibration(self.fit_mca)
+      # Update the fit object to be consistent with the Mca
+      self.fit.update(self.fit_mca)
       
       if (len(self.fit.peaks) == 0): self.fit.peaks=[Mca.McaPeak()]
       xsize=10
