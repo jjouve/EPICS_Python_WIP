@@ -1,12 +1,18 @@
 """
 Simple Graphical User Interface to Multi-Element-Detector
-Author:        M Newville  Nov. 8, 2001
-               Converted from IDL to Python, Mark Rivers, August 20, 2002
+
+Author:
+   M Newville  Nov. 8, 2001
 
 Modifications:
+   Aug. 20, 2002, Mark Rivers
+      - Converted from IDL to Python, Mark Rivers, 
    Sept. 24, 2002.  MLR
       - Fixed bug in opening a new mcaDisplay.
       - Change directory when saving a file so location becomes default
+   Sept. 25, 2002  MLR
+      - Added "Save Next" file menu and button
+      - Changed default file extension for saving files from ".xrf" to nothing.
 """
 
 from Tkinter import *
@@ -18,6 +24,7 @@ import epicsPV
 import myTkTop
 import epicsMed
 import localMedLayout
+import Xrf
 
 class medDisplay:
    def __init__(self, detector='13GE1:med:', element=1):
@@ -29,6 +36,7 @@ class medDisplay:
       self.status = 'Ready'
       self.path = '.'
       self.file = 'test.xrf'
+      self.next_file = self.file
       self.pvs = {}
       self.pvs['ElapsedReal'] = epicsPV.epicsPV(detector + 'ElapsedReal', wait=0)
       self.pvs['PresetReal']  = epicsPV.epicsPV(detector + 'PresetReal', wait=0)
@@ -53,9 +61,13 @@ class medDisplay:
       mb = Pmw.MenuBar(frame)
       mb.pack(fill=X)
       mb.addmenu('File', '', side='left')
+      self.widgets.file = mb.component('File-menu')
       mb.addmenuitem('File', 'command',
-                      label='Save Spectra',
+                      label='Save As ...',
                       command=self.menu_save)
+      mb.addmenuitem('File', 'command',
+                      label='Save Next = ' + self.next_file,
+                      command=self.menu_save_next)
       mb.addmenuitem('File', 'command',
                       label='New MCA Display',
                       command=self.menu_new_display)
@@ -112,8 +124,13 @@ class medDisplay:
       t = Button(row, text='Stop', command=self.menu_stop); t.pack(side=LEFT)
       t = Button(row, text='Erase', command=self.menu_erase); t.pack(side=LEFT)
       row = Frame(right_frame); row.pack(side=TOP)
-      t = Button(row, text='Copy ROIS', command=self.menu_copy_rois); t.pack(side=LEFT)
-      t = Button(row, text='Save Spectra', command=self.menu_save); t.pack(side=LEFT)
+      t = Button(row, text='Copy ROIS', command=self.menu_copy_rois)
+      t.pack(side=LEFT)
+      row = Frame(right_frame); row.pack(side=TOP, anchor=W)
+      t = Button(row, text='Save As ...', command=self.menu_save); t.pack(side=LEFT)
+      self.widgets.save_next = t = Button(row, text='Save Next = ' + self.next_file,
+                                          command=self.menu_save_next)
+      t.pack(side=LEFT)
 
       #
       row = Frame(right_frame); row.pack(side=TOP, anchor=W)
@@ -250,20 +267,32 @@ class medDisplay:
        self.mcaDisplay.open_detector(mca)
 
    ############################################################
+   def menu_save_next(self):
+      self.save_file(self.next_file)
+
+   ############################################################
    def menu_save(self):
       tfile = self.file
       file = tkFileDialog.asksaveasfilename(parent=self.widgets.top,
                                 title='Output file',
                                 initialdir=self.path,
-                                filetypes=[('All files','*.xrf')])
+                                filetypes=[('All files','*')])
       if (file == ''): return
       self.path = os.path.dirname(file)
       os.chdir(self.path)
       self.file = os.path.basename(file)
+      self.save_file(self.file)
+
+   ############################################################
+   def save_file(self, file):
       self.widgets.status.configure(text='Saving Spectra...')
       self.widgets.elapsed_real.configure(text=' ')
       self.med.write_file(file)
       self.widgets.status.configure(text='Ready')
+      self.next_file = Xrf.increment_filename(file)
+      self.widgets.file.entryconfigure('Save Next*', label='Save Next = ' +
+                                                    self.next_file)
+      self.widgets.save_next.configure(text='Save Next = ' + self.next_file)
 
    ############################################################
    def menu_timer(self):
