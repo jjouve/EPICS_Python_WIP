@@ -1,3 +1,19 @@
+"""
+This program provides a multichannel analyzer (MCA) display in Python using
+Tkinter widgets and Blt.
+
+Author:        Mark Rivers
+Created:       Sept. 20, 2002.  Based on my earlier IDL program
+Modifications:
+   Sept. 24, 2002. MLR
+      - Change default directory every time a file is read or written,
+        and when settings file is restored.
+      - Attempt to restore settings when display is created.
+      - Save settings each time program is exited with "File/Exit"
+      - Use MCA_SETTINGS environment variable, and mca.settings file
+        in current directory, in that order as location of settings.
+      - Remember MCA detector name and use it as default
+"""
 import os
 import math
 import cPickle
@@ -9,12 +25,12 @@ import tkSimpleDialog
 import Pmw
 import Mca
 import Med
-import epicsMca
+import hardwareMca
 import Xrf
 import CARSMath
-from mcaControlPresets import mcaControlPresets
-from mcaCalibrateEnergy import mcaCalibrateEnergy
-from mcaCalibrate2theta import mcaCalibrate2theta
+import mcaControlPresets
+import mcaCalibrateEnergy
+import mcaCalibrate2theta
 import mcaPeakFit
 import jcpds
 import BltPlot
@@ -41,11 +57,10 @@ class mcaDisplay_file:
       self.filepath      = './'
       self.filename      = ''          # name of saved or read
       self.next_filename = 'test.dat'  # name of next file to save
-      self.preffile      = 'mca.preferences'
+      self.settings_file = 'mca.settings'
       self.jcpds_path    = os.getenv('JCPDS_PATH')
       self.jcpds         = jcpds.jcpds()
-      self.mca_name      = ' '
-      self.preffile      = ' '
+      self.mca_name      = ''
 
 ############################################################
 class mcaDisplay_display:
@@ -96,7 +111,7 @@ class mcaDisplay_colors:
       self.label_background     = 'white'
 
 ############################################################
-class mcaDisplayPreferences:
+class mcaDisplaySettings:
    def __init__(self):
       pass
 
@@ -128,10 +143,10 @@ class mcaDisplay:
    Tk widgets. It emulates the look and feel of the Canberra MCA package.
 
    This program requires that the following environment variables be set:
-       MCA_PREFERENCES   - File name to save/restore for MCA program
-                           preferences, such as size, colors, line style,
+       MCA_SETTINGS      - File name to save/restore for MCA program
+                           settings, such as size, colors, line style,
                            etc.  If environment variable not set then the
-                           file mca.preferences in the current default
+                           file mca.settings in the current default
                            directory is used
        MCA_HELP_COMMAND  - System command to display MCA help text
        XRF_PEAK_LIBRARY  - File containing XRF line data.
@@ -160,17 +175,15 @@ class mcaDisplay:
       self.foreground.data = self.foreground.mca.get_data()
       self.foreground.nchans = len(self.foreground.data)
       self.background = mcaDisplay_mca()
+      self.peak_fit = Mca.McaFit()
       class widgets:
          pass
       self.widgets    = widgets()
-
-      preffile = os.getenv('MCA_PREFERENCES')
-      if (file != None): self.file.preffile = preffile
-#      self.restore_prefs
-
       self.create_display()
-
       self.update_spectrum(rescale=1)
+      settings_file = os.getenv('MCA_SETTINGS')
+      if (settings_file != None): self.file.settings_file = settings_file
+      self.restore_settings(self.file.settings_file)
 
 #     self.about()
       self.new_inputs()
@@ -182,7 +195,6 @@ class mcaDisplay:
    #############################################################
    def __del__(self):
       pass
-      #self.save_prefs()
 
    #############################################################
    def create_display(self):
@@ -266,7 +278,8 @@ class mcaDisplay:
          command=lambda s=self: BltPlot.BltConfigureMarker(
                                 s.widgets.plot, 'JCPDS*', command=s.JCPDS_marker_callback))
       mb.addmenuitem('Preferences', 'command', label='X axis...',
-         command=lambda s=self: BltPlot.BltConfigureAxis(s.widgets.plot, 'x'))
+         command=lambda s=self: BltPlot.BltConfigureAxis(
+                     s.widgets.plot, 'x', command=s.xaxis_callback))
       mb.addmenuitem('Preferences', 'command', label='Y axis...',
          command=lambda s=self: BltPlot.BltConfigureAxis(
                      s.widgets.plot, 'y', command=s.yaxis_callback))
@@ -573,10 +586,18 @@ class mcaDisplay:
 
    ############################################################
    def yaxis_callback(self, axis):
-      # This is called from BltConfigureMarker() whenever the Y axis
+      # This is called from BltConfigureAxis() whenever the Y axis
       # configuration has changed.
       self.display.vlog = int(self.widgets.plot.yaxis_cget('logscale'))
       self.widgets.lin_log.invoke(self.display.vlog)
+
+   ############################################################
+   def xaxis_callback(self, axis):
+      # This is called from BltConfigureAxis() whenever the X axis
+      # configuration has changed.
+      self.display.hmin = int(float(self.widgets.plot.xaxis_cget('min')))
+      self.display.hmax = int(float(self.widgets.plot.xaxis_cget('max')))
+      self.update_spectrum(rescale=1)
 
    ############################################################
    def menu_foreground_open_det(self):
@@ -585,13 +606,13 @@ class mcaDisplay:
    ############################################################
    def menu_foreground_open_file(self):
       file = tkFileDialog.askopenfilename(parent=self.widgets.top,
-                                initialdir=self.file.filepath,
                                 title='Input file',
                                 filetypes=[('All files','*')])
       if (file == ''): return
       path = os.path.dirname(file)
       file = os.path.basename(file)
       self.file.filepath = path
+      os.chdir(path)
       self.file.filename = file
       self.open_file(path + os.path.os.sep + file)
 
@@ -602,16 +623,16 @@ class mcaDisplay:
    ############################################################
    def menu_background_open_file(self):
       file = tkFileDialog.askopenfilename(parent=self.widgets.top,
-                                initialdir=self.file.filepath,
                                 title='Input file',
                                 filetypes=[('All files','*')])
       if (file == ''): return
       path = os.path.dirname(file)
       file = os.path.basename(file)
       self.file.filepath = path
+      os.chdir(path)
       self.file.filename = file
       self.background.name = file
-      self.open_file(file, background=1)
+      self.open_file(path + os.path.os.sep + file, background=1)
 
    ############################################################
    def menu_background_close(self):
@@ -638,12 +659,12 @@ class mcaDisplay:
    def menu_save_as(self):
       file = tkFileDialog.asksaveasfilename(parent=self.widgets.top,
                                 title='Output file',
-                                initialdir=self.file.filepath,
                                 filetypes=[('All files','*')])
       if (file == ''): return
       path = os.path.dirname(file)
       file = os.path.basename(file)
       self.file.filepath = path
+      os.chdir(path)
       self.file.filename = file
       self.save_file(file)
 
@@ -742,11 +763,11 @@ class mcaDisplay:
 
    ############################################################
    def menu_presets(self):
-      mcaControlPresets(self.foreground.mca)
+      mcaControlPresets.mcaControlPresets(self.foreground.mca)
 
    ############################################################
    def menu_calibrate_energy(self):
-      mcaCalibrateEnergy(self.foreground.mca,
+      mcaCalibrateEnergy.mcaCalibrateEnergy(self.foreground.mca,
                          command=self.calibrate_energy_done)
 
    ############################################################
@@ -759,7 +780,7 @@ class mcaDisplay:
 
    ############################################################
    def menu_calibrate_two_theta(self):
-      mcaCalibrate2theta(self.foreground.mca)
+      mcaCalibrate2theta.mcaCalibrate2theta(self.foreground.mca)
 
    ############################################################
    def menu_jcpds(self):
@@ -767,8 +788,9 @@ class mcaDisplay:
 
    ############################################################
    def menu_fit_peaks(self):
-      self.peak_fit=mcaPeakFit.mcaPeakFit(self.foreground.mca,
-                                          command=self.fit_peaks_return)
+      mcaPeakFit.mcaPeakFit(self.foreground.mca,
+                                    fit=self.peak_fit,
+                                    command=self.fit_peaks_return)
 
    ############################################################
    def menu_start(self):
@@ -981,6 +1003,7 @@ class mcaDisplay:
 
    ############################################################
    def menu_exit(self):
+      self.save_settings()
       self.widgets.top.destroy()
 
    ############################################################
@@ -1007,7 +1030,7 @@ class mcaDisplay:
                         self.save_file(self.file.next_filename)
                      if (self.options.autorestart):
                         self.foreground.mca.erase()
-                        self.foreground.mca.acquire_on()
+                        self.foreground.mca.start()
                   self.widgets.start.configure(state=NORMAL)
                   self.widgets.stop.configure(state=DISABLED)
             self.display.prev_acqg = self.display.current_acqg
@@ -1047,65 +1070,48 @@ class mcaDisplay:
    ############################################################
    def update_spectrum(self, rescale=0):
       graph = self.widgets.plot
+      hmax = min((self.display.hmax), (self.foreground.nchans-1))
+      hmin = max(self.display.hmin, 0)
+      xdata = tuple(range(hmin, hmax+1))
       if (rescale):
-         if (self.foreground.valid):
-            self.display.hmax = min((self.display.hmax),
-                                    (self.foreground.nchans-1))
-            graph.element_configure('foreground',
-                                 xdata=tuple(range(self.foreground.nchans)),
-                                 ydata=tuple(self.foreground.data))
-         graph.xaxis_configure(max=self.display.hmax, min=self.display.hmin)
-         graph.yaxis_configure(logscale=self.display.vlog)
+         graph.xaxis_configure(max=hmax, min=hmin)
+      if (self.foreground.valid):
+         ydata = self.foreground.data[hmin:hmax+1]
+         graph.element_configure('foreground', xdata=xdata,
+                                               ydata=tuple(ydata))
+#            visible_data = self.foreground.data[self.display.hmin:
+#                                                self.display.hmax+1]
+#            ymin = min(visible_data)
+#            ymax = max(visible_data)
 
-         # Build the display list of elements to display
-         display = ['foreground']
-         if (self.background.valid):
-            # There is a bug in Blt log plot if all channels are 0, sets
-            # small minimum.  Work around by setting channel 0 to 1 for now
-            self.background.data[0]=1
-            graph.element_configure('background',
-                                 xdata=tuple(range(self.background.nchans)),
-                                 ydata=tuple(self.background.data))
-            display.append('background')
-         for i in range(self.foreground.nrois):
-            roi = 'ROI'+str(i)
-            left = self.foreground.roi[i].left
-            right = self.foreground.roi[i].right+1
-            graph.element_configure(roi,
-                                    xdata=tuple(range(left, right)),
-                                    ydata=tuple(self.foreground.data[left:right]))
-            display.append(roi)
+      # Build the display list of elements to display
+      display = ['foreground']
+      if (self.background.valid):
+         # There is a bug in Blt log plot if all channels are 0, sets
+         # small minimum.  Work around by setting channel 0 to 1 for now
+         self.background.data[0]=1
+         ydata = self.background.data[hmin:hmax+1]
+         graph.element_configure('background', xdata=xdata,
+                                               ydata=tuple(ydata))
+         display.append('background')
+      for i in range(self.foreground.nrois):
+         roi = 'ROI'+str(i)
+         left = self.foreground.roi[i].left
+         right = self.foreground.roi[i].right+1
+         if (left > hmax) or (right < hmin): continue
+         left = max(left, hmin)
+         right = min(right, hmax)
+         graph.element_configure(roi,
+                                 xdata=tuple(range(left, right)),
+                                 ydata=tuple(self.foreground.data[left:right]))
+         display.append(roi)
+      graph.yaxis_configure(logscale=self.display.vlog)
+      graph.element_show(display)
 
-         # Set the Y plot limits.  ymax at least 100 if log, 10 if linear
-         # if (self.display.vlog):
-         #if (self.display.vauto):
-         #   ymin=""; ymax=""
-         #else:
-         #   if (self.display.vlog):
-         #      ymax = max(100, self.display.vmax)
-         #      ymin = max(1, self.display.vmin)
-         #   else:
-         #      ymax = max(10, self.display.vmax)
-         #      ymin = max(0, self.display.vmin)
-         #graph.yaxis_configure(min=ymin, max=ymax)
-
-         graph.element_show(display)
-
-         self.lmarker(self.display.lmarker)
-         self.rmarker(self.display.rmarker)
-         self.cursor(self.display.cursor)
-         self.rescale_jcpds()
-      else:
-         graph.element_configure('foreground', ydata=tuple(self.foreground.data))
-
-         if (self.background.valid):
-            graph.element_configure('background', ydata=tuple(self.background.data))
-
-      # Draw markers and cursor w/o writing to text widgets
-      self.draw_marker('left')
-      self.draw_marker('right')
-      self.draw_marker('cursor')
-
+      self.lmarker(self.display.lmarker)
+      self.rmarker(self.display.rmarker)
+      self.cursor(self.display.cursor)
+      self.rescale_jcpds()
 
    ############################################################
    def show_stats(self):
@@ -1208,25 +1214,26 @@ class mcaDisplay:
          return self.display.cursor
 
    ############################################################
-   def save_settings(self, file):
-      preferences = mcaDisplayPreferences()
-      preferences.filepath = self.file.filepath
-      preferences.mca_filename = self.file.filename
-      preferences.mca_name = self.file.mca_name
-      preferences.vlog = self.display.vlog
-      preferences.display_update_time =    self.display.update_time
-      preferences.autosave =       self.options.autosave
-      preferences.inform_save =    self.options.inform_save
-      preferences.warn_overwrite = self.options.warn_overwrite
-      preferences.warn_erase =     self.options.warn_erase
-      preferences.colors = self.colors
-      preferences.plot_settings = BltPlot.BltGetSettings(self.widgets.plot,
+   def save_settings(self, file=None):
+      if (file == None): file = self.file.settings_file
+      settings = mcaDisplaySettings()
+      settings.filepath = self.file.filepath
+      settings.mca_filename = self.file.filename
+      settings.mca_name = self.file.mca_name
+      settings.vlog = self.display.vlog
+      settings.display_update_time =    self.display.update_time
+      settings.autosave =       self.options.autosave
+      settings.inform_save =    self.options.inform_save
+      settings.warn_overwrite = self.options.warn_overwrite
+      settings.warn_erase =     self.options.warn_erase
+      settings.colors = self.colors
+      settings.plot_settings = BltPlot.BltGetSettings(self.widgets.plot,
                                                          data=0, markers=0)
-      preferences.print_settings = self.print_settings
+      settings.print_settings = self.print_settings
 
       try:
          fp = open(file, 'w')
-         cPickle.dump(preferences, fp)
+         cPickle.dump(settings, fp)
          fp.close()
       except:
          tkMessageBox.showerror(title='mcaDisplay Error',
@@ -1236,35 +1243,37 @@ class mcaDisplay:
    def restore_settings(self, file):
       try:
          fp = open(file, 'r')
-         preferences = cPickle.load(fp)
+         settings = cPickle.load(fp)
          fp.close()
       except:
          tkMessageBox.showerror(title='mcaDisplay Error',
                message = 'Error reading settings from file: ' + file)
-      if (hasattr(preferences, 'filepath')):
-          self.file.filepath = preferences.filepath
-      if (hasattr(preferences, 'mca_filename')):
-         self.file.filename = preferences.mca_filename
-      if (hasattr(preferences, 'mca_name')):
-         self.file.mca_name = preferences.mca_name
-      if (hasattr(preferences, 'vlog')):
-         self.display.vlog = preferences.vlog
-      if (hasattr(preferences, 'display_update_time')):
-         self.display.update_time = preferences.display_update_time
-      if (hasattr(preferences, 'autosave')):
-         self.options.autosave = preferences.autosave
-      if (hasattr(preferences, 'inform_save')):
-         self.options.inform_save = preferences.inform_save
-      if (hasattr(preferences, 'warn_overwrite')):
-         self.options.warn_overwrite = preferences.warn_overwrite
-      if (hasattr(preferences, 'warn_erase')):
-         self.options.warn_erase = preferences.warn_erase
-      if (hasattr(preferences, 'colors')):
-         self.colors = preferences.colors
-      if (hasattr(preferences, 'print_settings')):
-         self.print_settings = preferences.print_settings
-      if (hasattr(preferences, 'plot_settings')):
-         BltPlot.BltLoadSettings(self.widgets.plot, preferences.plot_settings)
+         return()
+      if (hasattr(settings, 'filepath')):
+          self.file.filepath = settings.filepath
+          os.chdir(self.file.filepath)
+      if (hasattr(settings, 'mca_filename')):
+         self.file.filename = settings.mca_filename
+      if (hasattr(settings, 'mca_name')):
+         self.file.mca_name = settings.mca_name
+      if (hasattr(settings, 'vlog')):
+         self.display.vlog = settings.vlog
+      if (hasattr(settings, 'display_update_time')):
+         self.display.update_time = settings.display_update_time
+      if (hasattr(settings, 'autosave')):
+         self.options.autosave = settings.autosave
+      if (hasattr(settings, 'inform_save')):
+         self.options.inform_save = settings.inform_save
+      if (hasattr(settings, 'warn_overwrite')):
+         self.options.warn_overwrite = settings.warn_overwrite
+      if (hasattr(settings, 'warn_erase')):
+         self.options.warn_erase = settings.warn_erase
+      if (hasattr(settings, 'colors')):
+         self.colors = settings.colors
+      if (hasattr(settings, 'print_settings')):
+         self.print_settings = settings.print_settings
+      if (hasattr(settings, 'plot_settings')):
+         BltPlot.BltLoadSettings(self.widgets.plot, settings.plot_settings)
       self.set_marker_colors()
       self.update_spectrum(rescale=1)
 
@@ -1367,6 +1376,7 @@ class mcaDisplay:
    ############################################################
    def open_det(self, background=0):
       name = tkSimpleDialog.askstring("Open Detector", "Detector name",
+                                      initialvalue=self.file.mca_name,
                                       parent=self.widgets.top)
       if (name != None):
          self.open_detector(name, background=background)
@@ -1374,7 +1384,7 @@ class mcaDisplay:
    ############################################################
    def open_detector(self, name, background=0):
       try:
-         mca = epicsMca.epicsMca(name)
+         mca = hardwareMca.hardwareMca(name)
          self.open(mca, name, background=background)
       except:
          tkMessageBox.showerror(title='mcaDisplay Error',
@@ -1457,7 +1467,7 @@ class mcaDisplay:
    def open(self, mca, name=' ', background=0):
       # Called when a new file or detector is opened
       if (not isinstance(mca, Mca.Mca)): return
-      if (isinstance(mca, epicsMca.epicsMca)):
+      if (isinstance(mca, hardwareMca.hardwareMca)):
          self.file.mca_name = name
          is_detector=1
       else:
@@ -1484,18 +1494,24 @@ class mcaDisplay:
          self.foreground.elapsed = self.foreground.mca.get_elapsed()
          self.foreground.data = self.foreground.mca.get_data()
          self.foreground.nchans = len(self.foreground.data)
+         self.display.hmax = self.foreground.nchans-1
       self.update_spectrum(rescale=1)
       self.show_stats()
       self.new_inputs()
 
    ############################################################
    def save_file(self, file):
-      exists =  (os.path.isfile(file))
-      if (exists and self.options.warn_overwrite):
-         reply = tkMessageBox.askyesno(title='mcaDisplay warning',
-            message='Warning - file: ' + file +
-                     ' already exists.  Overwrite file?')
-         if (not reply): return
+      # The following code warns the user if the file already exists, and
+      # if warn_overwrite is set then puts up a dialog to confirm overwriting.
+      # However, tk_asksavefile does this automatically and it can't be turned
+      # off, so we comment it out here.
+      
+      # exists =  (os.path.isfile(file))
+      # if (exists and self.options.warn_overwrite):
+      #   reply = tkMessageBox.askyesno(title='mcaDisplay warning',
+      #      message='Warning - file: ' + file +
+      #               ' already exists.  Overwrite file?')
+      #   if (not reply): return
 
       try:
          self.foreground.mca.write_file(file)
@@ -1581,7 +1597,7 @@ class mcaDisplay:
       elif (d_spacing):
          chan = self.foreground.mca.d_to_channel(value)
       else: chan = value
-      chan = int(min(max(chan, self.display.hmin), (self.display.hmax-1)))
+      chan = int(min(max(chan, self.display.hmin), self.display.hmax))
 
       if (marker == 'left'):
          self.display.lmarker = chan
