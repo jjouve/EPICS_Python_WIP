@@ -23,14 +23,18 @@ class mcaPeakFit:
    def __init__(self, mca, fit=None, command=None):
       class widgets:
          pass
+      self.results_file = 'fit_results.txt'
+      self.spreadsheet_file = 'fit_spreadsheet.txt'
       self.mca = mca
       self.callback_command = command
       self.widgets = widgets()
-      self.background_mca = copy.copy(mca)
-      self.fit_mca = copy.copy(mca)
+      self.background_mca = copy.deepcopy(mca)
+      self.fit_mca = copy.deepcopy(mca)
+      self.mark_peaks_mca = copy.deepcopy(mca)
       data = self.background_mca.get_data() * 0
       self.background_mca.set_data(data)
       self.fit_mca.set_data(data)
+      self.mark_peaks_mca.set_data(data)
       self.index=0
       if (fit == None):
          self.fit = Mca.McaFit(mca)
@@ -65,9 +69,10 @@ class mcaPeakFit:
       bcol = t.interior()
       row = Frame(bcol); row.pack(side=TOP)
       background = self.fit.background
+      self.exponent_options = ('2','4','6')
       self.widgets.exponent = t = Pmw.OptionMenu(row, labelpos=N,
                                     label_text='Exponent',
-                                    items=('2','4','6'),
+                                    items=self.exponent_options,
                                     initialitem = str(background.exponent))
       t.pack(side=LEFT)
       self.widgets.top_width = t = Pmw.EntryField(row,
@@ -82,15 +87,17 @@ class mcaPeakFit:
                                        labelpos=N, label_text='Bottom width',
                                        validate={'validator':'real'})
       t.pack(side=LEFT)
+      self.tangent_options = ('No', 'Yes')
       self.widgets.tangent = t = Pmw.OptionMenu(row, labelpos=N,
                                         label_text='Tangent?',
-                                        items=('No', 'Yes'),
+                                        items=self.tangent_options,
                                         menubutton_width=3,
                                         initialitem = background.tangent)
       t.pack(side=LEFT)
+      self.compress_options = ('1', '2', '4', '8', '16')
       self.widgets.compress = t = Pmw.OptionMenu(row, labelpos=N,
                                         label_text='Compression',
-                                        items=('1', '2', '4', '8', '16'),
+                                        items=self.compress_options,
                                         menubutton_width=2,
                                         initialitem = str(background.compress))
       t.pack(side=LEFT)
@@ -107,40 +114,47 @@ class mcaPeakFit:
       t = Pmw.Group(fcol, tag_text='Initial energy calibration'); 
       t.pack(side=TOP)
       row = t.interior()
-      self.widgets.energy_cal_offset = t = Pmw.EntryField(row, value=0,
+      self.widgets.energy_cal_offset = t = Pmw.EntryField(row,
+                            value=self.fit.initial_energy_offset,
                             entry_width=10, entry_justify=CENTER,
                             labelpos=W, label_text='Offset:',
                             validate={'validator':'real'})
       t.pack(side=LEFT)
-      self.widgets.energy_cal_slope = t = Pmw.EntryField(row, value=0,
+      self.widgets.energy_cal_slope = t = Pmw.EntryField(row,
+                            value=self.fit.initial_energy_slope,
                             entry_width=10, entry_justify=CENTER,
                             labelpos=W, label_text='Slope:',
                             validate={'validator':'real'})
       t.pack(side=LEFT)
+      self.optimize_options = ('Fix', 'Optimize')
       self.widgets.energy_cal_flag = t = Pmw.OptionMenu(row, labelpos=W,
                                         label_text='Flag:',
-                                        items=('Fix', 'Optimize'),
+                                        items=self.optimize_options,
                                         menubutton_width=8,
-                                        initialitem = 1)
+                                        initialitem = self.fit.energy_flag)
       t.pack(side=LEFT)
       t = Pmw.Group(fcol, tag_text='Initial FWHM calibration');
       t.pack(side=TOP)
       row = t.interior()
-      self.widgets.fwhm_cal_offset = t = Pmw.EntryField(row, value=0,
+      self.widgets.fwhm_cal_offset = t = Pmw.EntryField(row, 
+                            value=self.fit.initial_fwhm_offset,
+                            command = self.update_peaks,
                             entry_width=10, entry_justify=CENTER,
                             labelpos=W, label_text='Offset:',
                             validate={'validator':'real'})
       t.pack(side=LEFT)
-      self.widgets.fwhm_cal_slope = t = Pmw.EntryField(row, value=0,
+      self.widgets.fwhm_cal_slope = t = Pmw.EntryField(row,
+                            value=self.fit.initial_fwhm_slope,
+                            command = self.update_peaks,
                             entry_width=10, entry_justify=CENTER,
                             labelpos=W, label_text='Slope:',
                             validate={'validator':'real'})
       t.pack(side=LEFT)
       self.widgets.fwhm_cal_flag = t = Pmw.OptionMenu(row, labelpos=W,
                                         label_text='Flag:',
-                                        items=('Fix', 'Optimize'),
+                                        items=self.optimize_options,
                                         menubutton_width=8,
-                                        initialitem = 1)
+                                        initialitem = self.fit.fwhm_flag)
       t.pack(side=LEFT)
 
       width=10
@@ -161,7 +175,7 @@ class mcaPeakFit:
 
       self.widgets.energy_flag = t = Pmw.OptionMenu(row, labelpos=N,
                                         label_text='Energy flag',
-                                        items=('Fix', 'Optimize'),
+                                        items=self.optimize_options,
                                         initialitem = 1,
                                         menubutton_width=8,
                                         command=self.peak_params)
@@ -172,10 +186,11 @@ class mcaPeakFit:
                             validate={'validator':'real'},
                             command=self.peak_params)
       t.pack(side=LEFT)
+      self.global_optimize_options = ('Global', 'Optimize', 'Fix')
       self.widgets.fwhm_flag = t = Pmw.OptionMenu(row, labelpos=N,
                                         label_text='FWHM flag',
-                                        items=('Fix', 'Optimize'),
-                                        initialitem = 1,
+                                        items=self.global_optimize_options,
+                                        initialitem = 0,
                                         menubutton_width=8,
                                         command=self.peak_params)
       t.pack(side=LEFT)
@@ -216,16 +231,18 @@ class mcaPeakFit:
       t.pack()
 
       width=40
-      self.widgets.result_file_name = t = Pmw.EntryField(fcol, 
-                            value=self.fit.results_file,
-                            entry_width=width, entry_justify=CENTER,
-                            labelpos=W, label_text='Fit results file:')
-      t.pack(anchor=W)
-      self.widgets.spreadsheet_file_name = t = Pmw.EntryField(fcol, 
-                            value=self.fit.spreadsheet_file,
-                            entry_width=width, entry_justify=CENTER,
-                            labelpos=W, label_text='Fit spreadsheet file:')
-      t.pack(anchor=W)
+      row = Frame(fcol); row.pack(anchor=W)
+      t = Label(row, text='Fit results file:'); t.pack(side=LEFT)
+      self.widgets.results_file_name = t = Label(row, 
+                            text=self.results_file,
+                            foreground='blue', background='white')
+      t.pack(side=LEFT)
+      row = Frame(fcol); row.pack(anchor=W)
+      t = Label(row, text='Spreadsheet file:'); t.pack(side=LEFT)
+      self.widgets.spreadsheet_file_name = t = Label(row, 
+                            text=self.spreadsheet_file,
+                            foreground='blue', background='white')
+      t.pack(side=LEFT)
       self.widgets.append_mode = t = Pmw.OptionMenu(fcol, labelpos=W,
             label_text='Overwrite or append results and spreadsheet files:',
                                         items=('Overwrite', 'Append'),
@@ -233,9 +250,11 @@ class mcaPeakFit:
                                         initialitem = 1)
       t.pack(anchor=W)
       row = Frame(fcol); row.pack(side=TOP)
-      self.widgets.fit_peaks = t = Button(row, text='Fit peaks') 
+      self.widgets.fit_peaks = t = Button(row, text='Fit peaks',
+                                          command=self.fit_peaks) 
       t.pack(side=LEFT)
-      self.widgets.plot_fit = t = Button(row, text='Re-plot fit')
+      self.widgets.plot_fit = t = Button(row, text='Re-plot fit',
+                                         command=self.plot_fit)
       t.pack(side=LEFT)
       self.update_peaks()
 
@@ -246,10 +265,38 @@ class mcaPeakFit:
       self.update_peak_line()
       
    ############################################################
+   def update_globals(self):
+      self.widgets.exponent.setitems(self.exponent_options,
+                                     index=str(self.fit.background.exponent))
+      self.widgets.top_width.setentry(self.fit.background.top_width)
+      self.widgets.bottom_width.setentry(self.fit.background.bottom_width)
+      self.widgets.tangent.setitems(self.tangent_options,
+                                     index=self.fit.background.tangent)
+      self.widgets.compress.setitems(self.compress_options,
+                                     index=str(self.fit.background.compress))
+      self.widgets.energy_cal_offset.setentry(
+                                     self.fit.initial_energy_offset)
+      self.widgets.energy_cal_slope.setentry(
+                                     self.fit.initial_energy_slope)
+      self.widgets.energy_cal_flag.setitems(self.optimize_options,
+                                     index=self.fit.energy_flag)
+      self.widgets.fwhm_cal_offset.setentry(
+                                     self.fit.initial_fwhm_offset)
+      self.widgets.fwhm_cal_slope.setentry(
+                                     self.fit.initial_fwhm_slope)
+      self.widgets.fwhm_cal_flag.setitems(self.optimize_options,
+                                     index=self.fit.fwhm_flag)
+      
+   ############################################################
    def update_peaks(self):
+      self.read_globals()
       text = []
       peaks = self.fit.peaks
       for peak in peaks:
+         if (peak.fwhm_flag == 0):
+            peak.initial_fwhm = (self.fit.initial_fwhm_offset +
+                                 self.fit.initial_fwhm_slope *
+                                 math.sqrt(peak.initial_energy))
          s =  ('%15s'   % peak.label) + ', ' + \
               ('%10.4f' % peak.initial_energy) + ', ' + \
               ('%2d'    % peak.energy_flag) + ', ' + \
@@ -271,10 +318,10 @@ class mcaPeakFit:
       self.widgets.label.setentry(peak.label)
       self.widgets.energy.setentry(peak.initial_energy)
       self.widgets.energy_flag.setitems(
-                               ['Fix', 'Optimize'], index=peak.energy_flag)
+                        ['Fix', 'Optimize'], index=peak.energy_flag)
       self.widgets.fwhm.setentry(peak.initial_fwhm)
       self.widgets.fwhm_flag.setitems(
-                               ['Fix', 'Optimize'], index=peak.fwhm_flag)
+                        ['Global', 'Optimize', 'Fix'], index=peak.fwhm_flag)
       self.widgets.ampl_factor.setentry(peak.ampl_factor)
       if (self.callback_command != None):
          chan = self.mca.energy_to_channel(peak.initial_energy)
@@ -291,7 +338,7 @@ class mcaPeakFit:
       self.widgets.top.configure(cursor='watch')
       self.widgets.top.update()
       #self.widgets.peak_list.update_idletasks()
-      self.background_mca = Mca.fit_background(self.mca,
+      self.background_mca = self.mca.fit_background(
                                  exponent=background.exponent,
                                  compress=background.compress,
                                  tangent=background.tangent,
@@ -317,6 +364,7 @@ class mcaPeakFit:
       self.fit.peaks = r['peaks']
       self.fit.background = r['background']
       self.index = 0
+      self.update_globals()
       self.update_peaks()
 
    ############################################################
@@ -326,7 +374,7 @@ class mcaPeakFit:
                                 filetypes=[('Peak files','*.pks'),
                                            ('All files','*')])
       if (file == ''): return
-      Mca.write_peaks(file, peaks, self.fit.background)
+      Mca.write_peaks(file, self.fit.peaks, self.fit.background)
 
    ############################################################
    def set_results_file(self):
@@ -334,8 +382,8 @@ class mcaPeakFit:
                                 title='Results file',
                                 filetypes=[('All files','*')])
       if (file == ''): return
-      self.file.fit_results = file
-      self.widgets.results_file_name(setentry=file)
+      self.results_file = file
+      self.widgets.results_file_name.configure(text=file)
 
    ############################################################
    def set_spreadsheet_file(self):
@@ -343,8 +391,8 @@ class mcaPeakFit:
                                 title='Spreadsheet file',
                                 filetypes=[('All files','*')])
       if (file == ''): return
-      self.file.fit_spreadsheet = file
-      self.widgets.spreadsheet_file_name(setentry=file)
+      self.spreadsheet_file = file
+      self.widgets.spreadsheet_file_name.configure(text=file)
 
    ############################################################
    def menu_exit(self):
@@ -357,10 +405,10 @@ class mcaPeakFit:
       for peak in self.fit.peaks:
         chan = self.mca.energy_to_channel(peak.initial_energy, clip=1)
         temp[chan] = data[chan]
-      self.background_mca.set_data(temp)
-      self.background_mca.name = 'Peak positions'
+      self.mark_peaks_mca.set_data(temp)
+      self.mark_peaks_mca.name = 'Peak positions'
       if (self.callback_command != None):
-         self.callback_command(background_mca=self.background_mca)
+         self.callback_command(background_mca=self.mark_peaks_mca)
 
    ############################################################
    def peak_label(self):
@@ -399,7 +447,7 @@ class mcaPeakFit:
          energy=0.
       new_peak.initial_energy = energy
       # Make a reasonble estimate of initial FWHM
-      new_peak.initial_fwhm = 0.2 + .03*math.sqrt(abs(energy))
+      new_peak.initial_fwhm = .15
       new_peak.energy_flag=1
       new_peak.fwhm_flag=1
       if (insert):
@@ -439,14 +487,31 @@ class mcaPeakFit:
          self.callback_command(fit_mca=self.fit_mca)
 
    ############################################################
+   def read_globals(self):
+      self.fit.initial_energy_offset = float(self.widgets.energy_cal_offset.get())
+      self.fit.initial_energy_slope = float(self.widgets.energy_cal_slope.get())
+      self.fit.energy_flag = self.widgets.energy_cal_flag.index(Pmw.SELECT)
+      self.fit.initial_fwhm_offset = float(self.widgets.fwhm_cal_offset.get())
+      self.fit.initial_fwhm_slope = float(self.widgets.fwhm_cal_slope.get())
+      self.fit.fwhm_flag = self.widgets.fwhm_cal_flag.index(Pmw.SELECT)
+
+   ############################################################
    def fit_peaks(self):
-      append = self.widgets.append_mode.getcurselection()
+      append = self.widgets.append_mode.index(Pmw.SELECT)
+      self.read_globals()
       self.widgets.top.configure(cursor='watch')
       self.widgets.top.update()
-      self.fit_mca = self.mca.fit_peaks(self.fit, background=self.background_mca, 
-                                  append=append)
+      [self.fit, self.fit.peaks, self.fit_mca] = self.mca.fit_peaks(
+                                        self.fit.peaks, self.fit,
+                                        background=self.background_mca,
+                                        output=self.results_file,
+                                        spreadsheet=self.spreadsheet_file,
+                                        append=append)
       self.widgets.top.configure(cursor='')
       self.fit_mca.name = 'Peak fit'
       t = Pmw.TextDialog(title='mcaPeakFit Results',
-                     scrolledtext_width=85, scrolledtext_font=('Courier','8'))
-      t._scrolledtext.importfile(self.fit.results)
+                         text_width=85, text_font=('Courier','8'))
+      st = t.component('scrolledtext')
+      st.importfile(self.results_file)
+      st.see(END)
+      self.plot_fit()
