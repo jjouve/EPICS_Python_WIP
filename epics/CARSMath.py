@@ -118,8 +118,11 @@ def expand_array(array, expand, sample=0):
    if (sample == 1): return Numeric.repeat(array, expand)
 
    kernel = Numeric.ones(expand, Numeric.Float)/expand
-   temp = Numeric.convolve(Numeric.repeat(array, expand), kernel, mode=1)
-   # Replace the last few entries with the last entry of original
-   for i in range(1,expand/2+1): temp[-i]=array[-1]
+   # The following mimic the behavior of IDL's rebin when expanding
+   temp = Numeric.convolve(Numeric.repeat(array, expand), kernel, mode=2)
+   # Discard the first "expand-1" entries
+   temp = temp[expand-1:]
+   # Replace the last "expand" entries with the last entry of original
+   for i in range(1,expand): temp[-i]=array[-1]
    return temp
 
