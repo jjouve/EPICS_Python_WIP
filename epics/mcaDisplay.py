@@ -8,6 +8,7 @@ import tkMessageBox
 import tkSimpleDialog
 import Pmw
 import Mca
+import Med
 import epicsMca
 import Xrf
 import CARSMath
@@ -180,7 +181,7 @@ class mcaDisplay:
 
    #############################################################
    def __del__(self):
-      print 'mcaDisplay.__del__ called'
+      pass
       #self.save_prefs()
 
    #############################################################
@@ -1385,44 +1386,35 @@ class mcaDisplay:
             self.foreground.valid = 1
             self.foreground.is_detector = 0
          self.new_inputs()
-#
-#;*****************************************************************************
-#pro mca_display::select_det, n_det, detector
-#
-#    geometry=widget_info(self.widgets.base, /geometry)
-#    x = geometry.xoffset + geometry.xsize/2
-#    y = geometry.yoffset + geometry.ysize/2
-#    base = widget_base( title = 'Select detector  ', xoffset=x, yoffset=y, $
-#                        group = self.widgets.base, /row)
-#    widgets = {label: 0, list: 0}
-#    widgets.label = widget_label(base, value='Select detector to display:')
-#    choices = .Det. '+strtrim(indgen(n_det) + 1, 2), 'Total
-#    pdetector = ptr_new(detector)
-#    widgets.list = widget_droplist(base, value=choices, uvalue=pdetector)
-#    widget_control, base, set_uvalue = $
-#            {mca_display: self, detector: 0, widgets: widgets}
-#    widget_control, base, /realize
-#    xmanager, 'mca_display::select_det', base, $
-#                event='mca_display_select_det_event'
-#    detector = *pdetector
-#end
-#
-#;*****************************************************************************
-#pro mca_display_select_det_event, event
-#    ; called when select detector widget is modified
-#
-#    widget_control, event.top, get_uvalue = top
-#    top.mca_display.select_det_event, event, top.detector, top.widgets
-#end
-#
-#;*****************************************************************************
-#pro mca_display::select_det_event, event, detector, widgets
-#
-#    widget_control, widgets.list, get_uvalue = pdetector
-#    *pdetector = event.index
-#    widget_control, event.top, /destroy
-#end
-#
+
+   ############################################################
+   def select_det(self, n_det):
+      text = []
+      for i in range(1, n_det+1):
+         text.append(str(i))
+      text.append('Total')
+      self.widgets.select_det = t = Pmw.SelectionDialog(self.widgets.top,
+                              buttons=['OK'],
+                              title='Select Detector',
+                              scrolledlist_labelpos = 'n',
+                              label_text='Select detector to display:',
+                              command=self.select_det_done,
+                              scrolledlist_items=text)
+      # The following command makes this window modal
+      t.activate()
+      self.widgets.select_det.destroy()
+      return(self.selected_detector)
+      
+   ############################################################
+   def select_det_done(self, result):
+      all = list(self.widgets.select_det.get())
+      sel = self.widgets.select_det.getcurselection()
+      if (len(sel) == 0): self.selected_detector=0
+      else:
+         sel = sel[0]
+         self.selected_detector=all.index(sel)
+      self.widgets.select_det.deactivate(result)
+
 
    ############################################################
    def open_file(self, file, background=0):
@@ -1431,22 +1423,20 @@ class mcaDisplay:
          #    obj_destroy, self.background.mca
          # else:
          #   obj_destroy, self.foreground.mca
-         # med = Med.Med()
-         # med.read_file(file)
-         # mcas = med.get_mca_objects()
-         # n_det = len(mcas)
-         # if (n_det == 1):
-         #    mca = mcas[0]
-         # else:       # Multi-element detector
-         #    self.select_det(n_det, detector)
-         #    if (detector < n_det):
-         #       mca = mcas[detector]
-         #     else:
-         #        mca = mcas[0]
-         #        data = med.get_data(total=1, align=1)
-         #        mca.set_data(data)
-         mca = Mca.Mca()
-         mca.read_file(file)
+         med = Med.Med()
+         med.read_file(file)
+         mcas = med.get_mcas()
+         n_det = len(mcas)
+         if (n_det == 1):
+            mca = mcas[0]
+         else:       # Multi-element detector
+            detector = self.select_det(n_det)
+            if (detector < n_det):
+               mca = mcas[detector]
+            else:
+               mca = mcas[0]
+               data = med.get_data(total=1, align=1)
+               mca.set_data(data)
          self.open(mca, file, background=background)
       except IOError, e:
          if (background != 0):
