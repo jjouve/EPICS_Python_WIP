@@ -1,18 +1,36 @@
+"""
+Creates a GUI window to control the presets for an Mca.
+
+Author:         Mark Rivers
+Created:        Sept. 18, 2002
+Modifications:
+"""
 from Tkinter import *
 import Pmw
  
 class mcaControlPresets:
    def __init__(self, mca):
+      """
+      Creates a new GUI window for calibrating energy for an Mca object.
+      The preset live time, real time, start channel, end channel and total
+      counts can be controlled.
+
+      Inputs:
+         mca:
+            An Mca instance for which the presets are to be controlled.
+      """
+
       class widgets:
          pass
       self.mca = mca
       self.widgets = widgets()
-      t = Pmw.Dialog(command=self.menu_ok_cancel,
+      self.widgets.top = t = Pmw.Dialog(command=self.menu_ok_cancel,
                      buttons=('OK', 'Apply', 'Cancel'),
                      title='mcaControlPresets')
-      self.widgets.top = top = t.component('dialogchildsite')
+      top = t.component('dialogchildsite')
 
       self.presets = self.mca.get_presets()
+      row = Frame(top); row.pack()
       self.widgets.real_time = t = Pmw.EntryField(row,
                                value=str(self.presets.real_time), labelpos=N,
                                label_text='Real time:',
@@ -45,13 +63,14 @@ class mcaControlPresets:
       t.pack(side=LEFT)
 
    def menu_ok_cancel(self, value):
+      """ Private method """
       if (value == 'OK') or (value == 'Apply'):
          # Copy presets to Mca object
          self.presets.real_time = self.widgets.real_time.get()
          self.presets.live_time = self.widgets.live_time.get()
          self.presets.total_counts = self.widgets.total_counts.get()
-         self.presets.start_chan = self.widgets.start_chan.get()
-         self.presets.end_chan = self.widgets.end_chan.get()
+         self.presets.start_chan = self.widgets.start_channel.get()
+         self.presets.end_chan = self.widgets.end_channel.get()
          self.mca.set_presets(self.presets)
-      if (value != 'Apply'): Toplevel.destroy(self.widgets.top)
+      if (value != 'Apply'): self.widgets.top.destroy()
       

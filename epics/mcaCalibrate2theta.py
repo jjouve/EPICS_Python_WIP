@@ -1,3 +1,10 @@
+"""
+selfCreates a GUI window to calibrate 2-theta for an Mca.
+
+Author:         Mark Rivers
+Created:        Sept. 18, 2002
+Modifications:  MLR, Sept. 20, 2002.  Numerous bug fixes.
+"""
 from Tkinter import *
 import copy
 import tkMessageBox
@@ -12,6 +19,7 @@ import MLab
 
 ############################################################
 class mcaCalibrate2theta_widgets:
+   """ Private class"""
    def __init__(self, nrois):
       self.use_flag             = range(nrois)
       self.d_spacing            = range(nrois)
@@ -24,6 +32,37 @@ class mcaCalibrate2theta_widgets:
 
 class mcaCalibrate2theta:
    def __init__(self, mca, command=None):
+      """
+      Creates a new GUI window for calibrating 2-theta for an Mca object.
+
+      Inputs:
+         mca:
+            An Mca instance to be calibrated.  The Mca must have at least 1
+            Regions of Interest (ROI) defined.
+
+      Keywords:
+         command:
+            A callback command that will be executed if the OK button on
+            the GUI window is pressed.  The callback will be invoked as:
+               command(exit_status)
+            where exit_status is 1 if OK was pressed, and 0 if Cancel was
+            pressed or the window was closed with the window manager.
+
+      Procedure:
+         The calibration is done by determining the centroid position and
+         d-spacing of each ROI.
+
+         The centroids positions are computed by fitting the
+         ROI counts to a Gaussian, using CARSMath.fit_gaussian.
+
+         The d-spacing the ROI can be entered manually in the GUI window, or it
+         can be determined automatically if the label of the ROI can be
+         successfully used in jcpds.lookup_jcpds_line().
+
+         Each ROI can be selectively used or omitted when doing the calibration.
+
+         The errors in the 2-theta calibration, can be plotted using BltPlot.
+      """
       self.input_mca = mca
       self.mca = copy.deepcopy(mca)
       self.exit_command = command
@@ -42,9 +81,9 @@ class mcaCalibrate2theta:
       # Compute the centroid and FWHM of each ROI
       for i in range(self.nrois):
          left = self.roi[i].left
-         right = self.roi[i].right+1
-         total_counts = self.data[left:right]
-         n_sel        = right - left
+         right = self.roi[i].right
+         total_counts = self.data[left:right+1]
+         n_sel        = right - left + 1
          sel_chans    = left + Numeric.arange(n_sel)
          left_counts  = self.data[left]
          right_counts = self.data[right]
@@ -128,20 +167,23 @@ class mcaCalibrate2theta:
       t.pack(side=LEFT, anchor=S)
       self.widgets.plot_cal = t = Button(row, text='Plot 2-theta error',
                                         command=self.menu_plot_calibration)
-      t.pack()
+      t.pack(side=LEFT, anchor=S)
       self.widgets.two_theta_fit = t = Pmw.EntryField(row, 
                             label_text='Two-theta', labelpos=W,
                             value=self.calibration.two_theta,
-                            entry_width=text_width, entry_justify=CENTER, 
+                            entry_width=20, entry_justify=CENTER, 
                             command=self.menu_two_theta)
       t.pack(side=LEFT)
+      self.menu_do_fit()
 
    def menu_two_theta(self):
+      """ Private method """
       two_theta = float(self.widgets.two_theta.get())
       self.calibration.two_theta = two_theta
       self.widgets.two_theta.setentry('%.3f' % two_theta)
 
    def menu_plot_calibration(self):
+      """ Private method """
       energy = []
       two_theta_diff = []
       energy_use = []
@@ -161,26 +203,44 @@ class mcaCalibrate2theta:
                   label='Points used')
 
    def menu_energy(self, roi):
+      """ Private method """
       energy = float(self.widgets.energy[roi].get())
       self.roi[roi].energy = energy
       self.widgets.energy[roi].setentry('%.3f' % energy)
+      self.menu_do_fit()
 
    def menu_d_spacing(self, roi):
+      """ Private method """
       d_spacing = float(self.widgets.d_spacing[roi].get())
       self.roi[roi].d_spacing = d_spacing
       self.widgets.d_spacing[roi].setentry('%.3f' % d_spacing)
+      self.menu_do_fit()
 
    def menu_use(self, value, roi):
+      """ Private method """
       self.roi[roi].use = (value == 'Yes')
+      self.menu_do_fit()
 
    def menu_label(self, roi):
-       label = self.widgets.line[roi].get()
-       d_spacing = JCPDS.lookup_line(label)
-       if (d != None):
-          self.roi[roi].d_spacing = d_spacing
-       self.roi[roi].label=label
+      """ Private method """
+      label = self.widgets.label[roi].get()
+      d_spacing = jcpds.lookup_jcpds_line(label)
+      if (d_spacing != None):
+         self.roi[roi].d_spacing = d_spacing
+         self.widgets.d_spacing[roi].setentry('%.3f' % d_spacing)
+         self.menu_do_fit()
+      self.roi[roi].label=label
 
    def menu_do_fit(self):
+      """ Private method """
+      # Compute 2-theta for each ROI
+      for i in range(self.nrois):
+         if (self.roi[i].energy == 0) or (self.roi[i].d_spacing == 0):
+            self.two_theta[i] = 0.
+         else:
+            self.two_theta[i] = 2.0 * math.asin(12.398 / 
+               (2.0*self.roi[i].energy*self.roi[i].d_spacing))*180./math.pi
+         self.widgets.two_theta[i].configure(text=('%.5f' % self.two_theta[i]))
       # Find which ROIs should be used for the calibration
       use = []
       for i in range(self.nrois):
@@ -191,13 +251,12 @@ class mcaCalibrate2theta:
             message='Must have at least one valid point for calibration')
          return
       two_theta=[]
-      energy=[]
       for u in use:
          two_theta.append(self.two_theta[u])
-      self.calibration.two_theta = MLab.mean(self.two_theta[0:nuse])
-      sdev = MLab.std(self.two_theta[0:nuse])
+      self.calibration.two_theta = MLab.mean(two_theta)
+      sdev = MLab.std(two_theta)
       self.widgets.two_theta_fit.setentry(
-                                 ('%.3f' % self.calibration.two_theta)
+                                 ('%.5f' % self.calibration.two_theta)
                                  + ' +- ' + ('%.5f' % sdev))
       for i in range(self.nrois):
          two_theta_diff = self.two_theta[i] - self.calibration.two_theta
@@ -205,9 +264,10 @@ class mcaCalibrate2theta:
       self.mca.set_calibration(self.calibration)
 
    def menu_ok_cancel(self, button):
+      """ Private method """
       if (button == 'OK') or (button == 'Apply'):
          # Copy calibration and rois to input mca object
-         self.input_mca.set_calibration(calibration)
+         self.input_mca.set_calibration(self.calibration)
          self.input_mca.set_rois(self.roi)
       if (button == 'OK'):
          exit_status = 1
