@@ -4,7 +4,7 @@ import spline
 
 #########################################################################
 class Med(Mca.Mca):
-   def __init__(self, n_detectors=16):
+   def __init__(self, n_detectors=16, file=None):
       """
       Initialization code for creating a new Med object.
       m = Med(n_detectors=16)
@@ -16,6 +16,7 @@ class Med(Mca.Mca):
       self.mcas = []
       for i in range(n_detectors):
          self.mcas.append(Mca.Mca())
+      if (file != None): self.read_file(file)
 
    #########################################################################
    def initial_calibration(self, energy):
