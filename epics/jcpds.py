@@ -1,9 +1,25 @@
+"""
+Support for calculating D spacing for powder diffraction lines as
+as function of pressure and temperature, given symmetry, zero-pressue lattice
+constants and equation of state paramters.
+"""
 import string 
 import math
 import os
 #from Scientific.Functions.FindRoot import newtonRaphson
 
 class jcpds_reflection:
+   """
+   Class that defines a reflection.
+   Attributes:
+      d0:     Zero-pressure lattice spacing
+      d:      Lattice spacing at P and T
+      inten:  Relative intensity to most intense reflection for this material
+      h:      H index for this reflection
+      k:      K index for this reflection
+      l:      L index for this reflection
+
+   """
    def __init__(self):
       self.d0 = 0.
       self.d  = 0.
@@ -45,13 +61,12 @@ class jcpds:
 
    def read_file(self, file):
       """
-      PURPOSE:
-         This procedure reads a JCPDS file into the JCPDS object.
-      CALLING SEQUENCE:
-         jcpds.read_file(file)
-      INPUTS:
+      Reads a JCPDS file into the JCPDS object.
+
+      Inputs:
          file:  The name of the file to read.
-      PROCEDURE:
+         
+      Procedure:
          This procedure read the JCPDS file.  There are several versions of the
          formats used for JCPDS files.  Versions 1, 2 and 3 used a fixed
          format, where a particular entry had to be in a specific location on
@@ -60,7 +75,7 @@ class jcpds:
          created in this format, they should be converted to Version 4.
          Version 4 is a "keyword" driven format.  Each line in the file is of
          the form:
-      KEYWORD: value
+         KEYWORD: value
          The order of the lines is not important, except that the first line of
          the file must be "VERSION: 4".
          The following keywords are currently supported:
@@ -227,18 +242,17 @@ class jcpds:
  
    def write_file(self, file):
       """
-      PURPOSE:
-         Write a JCPDS object to a file.
-      CALLING SEQUENCE:
-         jcpds.write_file(file)
-      INPUTS:
+      Writes a JCPDS object to a file.
+
+      Inputs:
          file:  The name of the file to written.
-      PROCEDURE:
+         
+      Procedure:
          This procedure writes a JCPDS file.  It always writes files in the
          current, keyword-driven format (Version 4).  See the documentation for
-         <A HREF="#JCPDS::READ_FILE">JCPDS::READ_FILE</A> for information on
-         the file format.
-      EXAMPLE:
+         read_file() for information on the file format.
+         
+      Example:
          This reads an old format file, writes a new format file.
          j = jcpds.jcpds()
          j.read_file('alumina_old.jcpds')
@@ -271,15 +285,14 @@ class jcpds:
 
    def compute_v0(self):
       """  
-      PURPOSE:
-         This procedure computes the unit cell volume of the material at zero
-         pressure and temperature from the unit cell parameters.
-      CALLING SEQUENCE:
-         jcpds.compute_v0()
-      PROCEDURE:
+      Computes the unit cell volume of the material at zero pressure and
+      temperature from the unit cell parameters.
+
+      Procedure:
          This procedure computes the unit cell volume from the unit cell
          parameters.
-      EXAMPLE:
+         
+      Example:
          Compute the zero pressure and temperature unit cell volume of alumina
          j = jcpds()
          j.read_file('alumina.jcpds')
@@ -333,17 +346,19 @@ class jcpds:
 
    def compute_volume(self, pressure=0., temperature=0.):
       """
-      PURPOSE:
-         This procedure computes the unit cell volume of the material.
-        It can compute volumes at different pressures and temperatures.
-      CALLING SEQUENCE:
-         jcpds.compute_volume(pressure, temperature)
-      OPTIONAL INPUTS:
-         Pressure:    The pressure in GPa.  If not present then the pressure is
-                      assumed to be 0.
-         Temperature: The temperature in K.  If not present or zero, then the
-                      temperature is assumed to be 298K, i.e. room temperature.
-      PROCEDURE:
+      Computes the unit cell volume of the material.
+      It can compute volumes at different pressures and temperatures.
+
+      Keywords:
+         pressure:
+            The pressure in GPa.  If not present then the pressure is
+            assumed to be 0.
+            
+         temperature:
+            The temperature in K.  If not present or zero, then the
+            temperature is assumed to be 298K, i.e. room temperature.
+            
+      Procedure:
          This procedure computes the unit cell volume.  It starts with the
          volume read from the JCPDS file or computed from the zero-pressure,
          room temperature lattice constants.  It does the following:
@@ -352,21 +367,14 @@ class jcpds:
                if ALPHAT0 is non-zero.
             3) Computes the volume at the specified pressure if K0 is non-zero.
                The routine uses the IDL function FX_ROOT to solve the third
-               order Birch-Murnaghan equation of state. 
-      EXAMPLE:
+               order Birch-Murnaghan equation of state.
+               
+      Example:
          Compute the unit cell volume of alumina at 100 GPa and 2500 K.
          j = jcpds()
          j.read_file('alumina.jcpds')
          j.compute_volume(100, 2500)
-      MODIFICATIONS:  
-         Started with IDL version June 1, 2002 which had this history
-         31-May-2000 MLR Issue warning if K0 is 0, but return 0 pressure volume
-         06-Sep-2000 MLR Change to Anderson thermal pressure EOS for high P+T
-         27-Feb-2001 MLR Add support for dk0pdt and dalphadt.
-         13-Mar-2001 MLR Put addtional sanity check (f ge 0.) in BM solver.  
-         17-Mar-2001 MLR Replaced home-grown solver for BM equation of state
-                         with IDL FX_ROOT function.  It is much faster, 
-                         more accurate, and more robust.
+         
       """
 
       # Assume 0 K really means room T
@@ -389,22 +397,22 @@ class jcpds:
 
    def bm3_inverse(self, v0_v):
       """
-      PURPOSE:
-         This function returns the value of the third order Birch-Murnaghan
-         equation minus pressure.  It is used to solve for V0/V for a given
+      Returns the value of the third order Birch-Murnaghan equation minus
+      pressure.  It is used to solve for V0/V for a given
          P, K0 and K0'.
-      CALLING SEQUENCE:
-         result = bm3_inverse(v0_v, pressure)
-      INPUTS:
+
+      Inputs:
          v0_v:   The ratio of the zero pressure volume to the high pressure
                  volume
-      OUTPUTS:
+      Outputs:
          This function returns the value of the third order Birch-Murnaghan
-         equation minus pressure.  
-      PROCEDURE:
+         equation minus pressure.  \
+         
+      Procedure:
          This procedure simply computes the pressure using V0/V, K0 and K0',
          and then subtracts the input pressure.
-      EXAMPLE:
+         
+      Example:
          Compute the difference of the calculated pressure and 100 GPa for
          V0/V=1.3 for alumina
          jcpds = obj_new('JCPDS')
@@ -423,25 +431,29 @@ class jcpds:
 
    def compute_d(self, pressure=0., temperature=0.):
       """
-      PURPOSE:
-         This procedure computes the D spacings of the material.
-         It can compute D spacings at different pressures and temperatures.
-      CALLING SEQUENCE:
-         jcpds.compute_d(pressure, temperature)
-      OPTIONAL INPUTS:
-         Pressure:    The pressure in GPa.  If not present then the pressure is
-                      assumed to be 0.
-         Temperature: The temperature in K.  If not present or zero, then the
-                      temperature is assumed to be 298K, i.e. room temperature.
-      OUTPUTS:
+      Computes the D spacings of the material.
+      It can compute D spacings at different pressures and temperatures.
+
+      Keywords:
+         pressure:
+            The pressure in GPa.  If not present then the pressure is
+            assumed to be 0.
+            
+         temperature:
+            The temperature in K.  If not present or zero, then the
+            temperature is assumed to be 298K, i.e. room temperature.
+            
+      Outputs:
          None.  The D spacing information in the JCPDS object is calculated.
-      PROCEDURE:
+         
+      Procedure:
           This procedure first calls jcpds.compute_volue().
           It then assumes that each lattice dimension fractionally changes by
           the cube root of the fractional change in the volume.
           Using the equations for the each symmetry class it then computes the
           change in D spacing of each reflection.
-      EXAMPLE:
+          
+      Example:
          Compute the D spacings of alumina at 100 GPa and 2500 K.
          j=jcpds()
          j.read_file('alumina.jcpds')
@@ -512,12 +524,8 @@ class jcpds:
 
    def get_reflections(self):
       """
-      PURPOSE:
-         This function returns the information for each reflection for the
-         material.  This information is an array of elements of class
-         jcpds_reflection
-      CALLING SEQUENCE:
-         r = jcpds.get_reflections()
+      Returns the information for each reflection for the material.
+      This information is an array of elements of class jcpds_reflection
       """
       return self.reflections
 
@@ -526,12 +534,9 @@ def lookup_jcpds_line(in_string,
                       temperature=0., 
                       path = os.getenv('JCPDS_PATH')):
    """
-   PURPOSE:
-      This function returns the d-spacing in Angstroms for a particular
-      lattice plane.
-   CALLING SEQUENCE:
-      Result = lookup_jcpds_line(diffraction_plane)
-   INPUTS:
+   Returns the d-spacing in Angstroms for a particular lattice plane.
+
+   Inputs:
       Diffaction_plane: A string of the form 'Compound HKL', where Compound
       is the name of a material (e.g. 'gold', and HKL is the diffraction
       plane (e.g. 220).
@@ -539,39 +544,46 @@ def lookup_jcpds_line(in_string,
         Examples of Diffraction_plane:
             'gold 111' - Gold 111 plane
             'si 220'   - Silicon 220 plane
-   KEYWORD PARAMETERS:
-      PATH:
+            
+   Keywords:
+      path:
          The path in which to look for the file 'Compound.jcpds'.  The
          default is to search in the directory pointed to by the
          environment variable JCPDS_PATH.
-      PRESSURE:
+         
+      pressure:
          The pressure at which to compute the d-spacing.  Not yet
          implemented, zero pressure d-spacing is always returned.
-      TEMPERATURE:
+         
+      temperature:
           The temperature at which to compute the d-spacing.  Not yet
           implemented.  Room-temperature d-spacing is always returned.
-   OUTPUTS:
+          
+   Outputs:
       This function returns the d-spacing of the specified lattice plane.
       If the input is invalid, e.g. non-existent compound or plane, then the
       function returns None.
-   RESTRICTIONS:
+      
+   Restrictions:
       This function attempts to locate the file 'Compound.jcpds', where
       'Compound' is the name of the material specified in the input parameter
       'Diffraction_plane'.  For example:
-          d = LOOKUP_JCPDS_LINE('gold 220')
+          d = lookup_jcpds_line('gold 220')
       will look for the file gold.jcpds.  It will either look in the file
       specified in the PATH keyword parameter to this function, or in the
       the directory pointed to by the environtment variable JCPDS_PATH
       if the PATH keyword is not specified.  Note that the filename will be
-      case sensitive on Unix systems, but not on Windows or VMS systems.
+      case sensitive on Unix systems, but not on Windows.
 
       This function is currently only able to handle HKL values from 0-9.
       The parser will need to be improved to handle 2-digit values of H,
       K or L.
-   PROCEDURE:
-      This function calls READ_JCPDS and searches for the specified HKL plane
+      
+   Procedure:
+      This function calls jcpds.read_file() and searches for the specified HKL plane
       and returns its d-spacing;
-   EXAMPLE:
+      
+   Example:
       d = lookup_jcpds_line('gold 111')   # Look up gold 111 line
       d = lookup_jcpds_line('quartz 220') # Look up the quartz 220 line
    """
