@@ -2,11 +2,21 @@
 Support for calculating D spacing for powder diffraction lines as
 as function of pressure and temperature, given symmetry, zero-pressue lattice
 constants and equation of state paramters.
+
+Author:
+  Mark Rivers
+
+Created:
+   Sept. 10, 2002 from older IDL version
+
+Modifications:
+   Sept. 26, 2002 MLR
+      - Implemented Birch-Murnaghan solver using CARSMath.newton root finder
 """
 import string 
 import math
 import os
-#from Scientific.Functions.FindRoot import newtonRaphson
+import CARSMath
 
 class jcpds_reflection:
    """
@@ -392,7 +402,7 @@ class jcpds:
          else:
             self.mod_pressure = pressure - \
                                     self.alphat*self.k0*(temperature-298.)
-            v0_v = newtonRaphson(self.bm3_inverse, .1, 10., 1.e-6)
+            v0_v = CARSMath.newton(self.bm3_inverse, 1.)
             self.v = self.v0/v0_v
 
    def bm3_inverse(self, v0_v):
