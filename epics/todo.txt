@@ -1,8 +1,12 @@
-fit_peaks.pro 
-fitting 
-hardware_mca__define.pro 
-hardware_mca__define_epics.pro 
-mca.pro 
-oxford_to_mca.pro 
-read_spectrum.pro 
-extract_spectra_scans.pro 
+Things to do:
+
+- Documentation!!
+
+- Make a virtual class for hardware MCAs
+  hardware_mca__define.py
+
+- Script to launch mca display (mca.py)
+
+- Convert from WDS data (oxford_to_mca.pro) 
+
+- Extract ROIS from multiple spectra (extract_spectra_scans.pro) 
