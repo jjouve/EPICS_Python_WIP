@@ -22,6 +22,8 @@ class epicsPV(CaChannel):
       self.monitored = 0
 
    def checkMonitor(self):
+      # This should be self.poll(), but that is generating errors
+      self.pend_event(.0001)
       m = self.newMonitor
       self.newMonitor = 0
       return m
@@ -52,6 +54,13 @@ class epicsPV(CaChannel):
       else:
          return CaChannel.getw(self, req_type, count)
 
+   def getValue(self):
+      if (self.monitored):
+         self.newMonitor = 0
+         return self.pv_value
+      else:
+         return CaChannel.getValue(self)
+
    def putWait(self, value, req_type=None, count=None, poll=.01):
       self.putComplete=0
       self.array_put_callback(value, req_type, count, self.putCallBack, 0)
@@ -62,6 +71,7 @@ class epicsPV(CaChannel):
       self.putComplete=1
 
    def getCallBack(self, epicsArgs, userArgs):
+      #print 'getCallBack entered'
       self.newMonitor = 1
       for key in epicsArgs.keys():
          setattr(self, key, epicsArgs[key])
