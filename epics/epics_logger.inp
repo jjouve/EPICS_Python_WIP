@@ -1,0 +1,8 @@
+13BMD:DMM1Ch1_calc.VAL | %15.5f | Load, Tons | %15.15s
+13BMD:DMM1Ch3_calc.VAL | %15.5f | Ram Ht, mm | %15.15s
+13BMD:DMM1Ch5_calc.VAL | %15.3f | Sample Tc, mV | %15.15s
+13BMD:DMM2Ch6_calc.VAL | %15.5f | Amps | %15.15s
+13BMD:DMM2Ch1_calc.VAL | %15.5f | Volts | %15.15s
+13BMD:DMM1Ch8_calc.VAL | %15.5f | Anvil Tc | %15.15s
+13BMD:DMM1Ch10_calc.VAL | %15.5f | T (C) | %15.15s
+13BMD:DMM2Ch4_calc.VAL | %15.5f | Watts | %15.15s

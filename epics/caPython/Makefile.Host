@@ -1,0 +1,37 @@
+# Makefile.Host
+# For python ca wrappers.
+TOP = ../../..
+include $(TOP)/config/CONFIG_APP
+#----------------------------------------
+#  ADD MACRO DEFINITIONS AFTER THIS LINE
+
+#PROD=camodule.so
+#SRCS=ca_wrap.c
+
+LIBRARY=camodule
+LIBSRCS=ca_wrap.c
+
+USR_INCLUDES=-I$(PYTHON_DIR)/include/python1.5
+
+SHARED_LIBRARIES=YES
+
+USR_LIBS = ca
+USR_LIBS += Com
+
+USR_LDFLAGS = -L$(EPICS_DIR)/base/lib/$(HOST_ARCH)
+
+DOCS += capython.pdf
+
+# Override the standard in CONFIG.Host.UnixCommon so that
+# the "lib" is removed from the front of the library name.
+# Python doesn't recognize the "lib" prefix.
+LIBNAME = $(LIBRARY:%=%.a)
+SHRLIBNAME = $(LIBRARY)$(SHRLIB_SUFFIX)$(SHRLIB_VERSION:%=.%)
+
+include $(TOP)/config/RULES.Host
+#----------------------------------------
+#  ADD RULES AFTER THIS LINE
+
+../ca_wrap.c: ../ca.i
+	swig -python $<
+
