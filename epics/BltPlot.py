@@ -1,3 +1,4 @@
+#!/usr/bin/python
 """
 This module provides enhancements to the Pmw.Blt.Graph widget.  It has the
 following main features:
@@ -20,6 +21,10 @@ following main features:
 Author:          Mark Rivers
 Created:         Sept. 18, 2002
 Modifications:
+  1.3   Nov 20 2002   M Newville  added BltExport function, and public method
+                      BltPlot.export() to export image of graph to named
+                      external file (available formats: gif, ppm, and also
+                      png and jpg if Python Image library is available).
 """
 from Tkinter import *
 import tkColorChooser
@@ -94,6 +99,8 @@ class BltPlot:
                       command=lambda g=self.graph: BltPrintSetup(g))
       mbar.addmenuitem('File', 'command', label='Print...',
                       command=lambda g=self.graph: BltPrint(g))
+      mbar.addmenuitem('File', 'command', label='Export...',
+                      command=lambda g=self.graph, t=top: BltExport(g,t))
       mbar.addmenuitem('File', 'command', 'Exit', label='Exit',
                       command=self.exit)
       mbar.addmenu('Configure', '', side='left')
@@ -116,6 +123,7 @@ class BltPlot:
       if (self.exit_callback != None):
          self.exit_callback(self.graph)
       self.widgets.top.destroy()
+
 
    ########################################################################
    def rebuild_menus(self):
@@ -388,6 +396,10 @@ class BltPlot:
       elif (event.type == '8'):  # Leave event - unhighlight
          g.element_deactivate(element)
 
+   ########################################################################
+   def export(self, file='blt.gif',format=None):
+      "Save graph image to GIF, PPM, (and possibly PNG, or JPG) output file"
+      BltExport(self.graph, self.widgets.top, file=file,format=format)
 
 ########################################################################
 class BltPrintSetup:
@@ -1249,8 +1261,80 @@ def BltRestoreSettings(graph, file):
       file:
          The name of a file containing the settings saved previously with
          BltSaveSettings().
-
+   
    """
    fp = open(file, 'r')
    s = cPickle.load(fp)
    BltLoadSettings(graph, s)
+   ########################################################################
+
+def BltExport(graph, master, file=None, format=None):
+   """
+   save graph image to GIF, PPM, (and possibly PNG, or JPG) output file.
+   
+     BltExport(graph, master, file='my.png', format='png')
+
+   where
+     graph    Blt.graph
+     master   toplevel widget containing graph
+     file     name of output file
+     format   output format ('gif','ppm') and possibly ('png', 'jpg')
+    
+   if format is not recognized, no output is written.
+   if file=None (or is not supplied), a Tk file dialog is presented.
+   
+   notes: saving PNG or JPG requires the Python Imaging Library,
+          and uses a temporary PPM file named '_blt_image.ppm'
+          (since Tk PhotoImage has a write() method that takes a
+          filename, not a file instance!!)
+   """
+
+   # ImgForms keeps formats and corresponding way of saving
+   import string
+   ImgForms = {'gif':None, 'ppm': None}
+
+   try:   # if we can import Image, add png and jpg image types
+      import Image
+      Image_open = Image.open
+      ImgForms.update({ 'png':'PNG', 'jpg':'JPEG', 'jpeg':'JPEG'})
+      # these image require Image extension and a temporary file
+      _temp_   = '_blt_image.tmp'
+   except:
+      Image_open = None
+   #
+   types   = ImgForms.keys() ; types.sort()
+   img_list= string.join(map(lambda x:"*.%s" % (x), types))
+
+   if (not file):
+      file = tkFileDialog.asksaveasfilename(parent=master,
+                                            title='Export to image file',
+                                            filetypes=[('Image Files',img_list),
+                                                       ('All files','*')])
+      
+   if (file == ''): return
+
+   # if the format was not explicit, get it from file extension
+   if (not format):    format = file.split('.')[-1].lower()
+   if (format not in ImgForms.keys()): format = 'gif'
+
+   out = (file,format)       # save output file / format
+
+   if (format in ImgForms.keys()):
+      if (ImgForms[format]):  out = (_temp_,  'ppm')
+
+      # save image (possibly to temporary file)
+      if (graph):
+         img = PhotoImage(master=master, name='blt_snap')
+         graph.snap(img)
+         img.write(out[0],out[1])
+
+         # if png or jpg is needed, use Image library
+         # to convert temporary PPM to PNG/JPEG
+         if (ImgForms[format] and Image_open):
+            im = Image_open(_temp_)
+            im.save(file, ImgForms[format])
+            os.unlink(_temp_)
+
+   ########################################################################
+
+
