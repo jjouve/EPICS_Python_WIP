@@ -110,7 +110,8 @@ class epicsMca(Mca):
       for env in self.environment:
          self.env_pvs.append(epicsPV(env.name, wait=0))
 
-      # Wait for all PVs to connect
+      # Wait for all PVs to connect.  30 second timeout is for WAN, but
+      # even this does not seem to be long enough on DSL connection
       self.pvs['calibration']['calo'].pend_io(30.)
 
       # ClientWait does not exist in simple_mca.db, which is used
@@ -257,7 +258,7 @@ class epicsMca(Mca):
       pvs['seq'].pend_io()
          
    #######################################################################
-   def get_rois(self):
+   def get_rois(self, energy=0):
       for i in range(self.max_rois):
          pvs = self.roi_def_pvs[i]
          for pv in pvs.keys():
@@ -275,7 +276,7 @@ class epicsMca(Mca):
          roi.use = 1
          if (roi.left > 0) and (roi.right > 0): rois.append(roi)
       Mca.set_rois(self, rois)
-      return rois
+      return Mca.get_rois(self, energy=energy)
 
    #######################################################################
    def set_rois(self, rois, energy=0):
