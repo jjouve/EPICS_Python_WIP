@@ -10,6 +10,8 @@ Revision history: Original version was written in IDL
       - Fixed bug when opening environment file
       - Fixed bug reading description from environment file
       - Fixed bug reading environment PVs
+   Sept. 25, 2002  MLR.
+      - Fixed bug reading environment file
 """
 import os
 import string
@@ -176,9 +178,9 @@ class epicsMca(Mca.Mca):
           pos = line.find(' ')
           if (pos != -1):
              env.name = line[0:pos]
-             env.description = line[pos+1:-1]
+             env.description = line[pos+1:].strip()
           else:
-             env.name = line
+             env.name = line.strip()
              env.description = ' '
           self.environment.append(env)
 
