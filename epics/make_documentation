@@ -1,0 +1,3 @@
+dest="/millenia/www/htdocs/software/python"
+pydoc -w $1
+mv $1.html $dest
