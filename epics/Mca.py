@@ -2,8 +2,11 @@ import Numeric
 import string
 import copy
 import math
+import sys
+import time
 import CARSMath
 import Xrf
+import fit_peaks
 
 ########################################################################
 class McaBackground:
@@ -17,15 +20,13 @@ class McaBackground:
 ########################################################################
 class McaFit:
    def __init__(self, mca=None):
-      if (mca == None): mca=Mca.Mca()
+      if (mca == None): mca=Mca()
       calibration = mca.get_calibration()
       self.npeaks =       0      # Number of peaks to fit
       self.first_chan =   0      # First channel to fit
       self.nchans =       len(mca.data)   # Number of channels 
       self.last_chan =    self.nchans-1   # Last channel to fit
       self.nparams =      0      # Number of fit parameters
-      self.initial_energy_offset =  0.
-      self.initial_energy_slope =   0.
       self.initial_energy_offset = calibration.offset
       self.initial_energy_slope =  calibration.slope
       self.energy_offset =  0.   # Energy calibration offset
@@ -139,7 +140,7 @@ class McaEnvironment:
 
 ########################################################################
 class Mca:
-   def __init__(self, file=None):
+   def __init__(self, file=None, **filekw):
       """
       CALLING SEQUENCE:
          m = Mca()
@@ -164,7 +165,7 @@ class Mca:
       self.presets = McaPresets()
       self.environment = []
       if (file != None):
-         self.read_file(file)
+         self.read_file(file, **filekw)
 
    ########################################################################
    def get_calibration(self):
@@ -605,12 +606,15 @@ class Mca:
         write_ascii_file(file, data, calibration, elapsed, presets, rois,
                          environment)
 
+
    ########################################################################
-   def read_file(self, file, netcdf=0):
+   def read_file(self, file, netcdf=0, detector=0):
       """
       PURPOSE:
          This procedure reads a disk file into an MCA object.  If the netcdf=1
          flag is set it reads a netcdf file, else it assumes the file is ASCII.
+         If the data file has multiple detectors then the detector keyword can be
+         used to specify which detector data to return.
       CALLING SEQUENCE:
          mca.read_file(file)
       INPUTS:
@@ -624,11 +628,498 @@ class Mca:
       else:
          r = read_ascii_file(file)
       self.name = file
-      self.calibration = r['calibration'][0]
-      self.data = r['data'][0]
-      self.elapsed = r['elapsed'][0]
-      self.rois = r['rois'][0]
+      self.calibration = r['calibration'][detector]
+      self.data = r['data'][detector]
+      self.elapsed = r['elapsed'][detector]
+      self.rois = r['rois'][detector]
       self.environment = r['environment']
+
+
+   ########################################################################
+   def fit_background(self, bottom_width=4., top_width=0., exponent=2, 
+                      tangent=0, compress=4):
+      """
+      PURPOSE:
+         This function fits a background to an MCA spectrum.
+         The background is fitted using an enhanced version of the algorithm
+         published by Kajfosz, J. and Kwiatek, W .M. (1987)  "Non-polynomial
+         approximation of background in x-ray spectra." Nucl. Instrum. Methods
+         B22, 78-81.
+      KEYWORD PARAMETERS:
+         TOP_WIDTH:
+             Specifies the width of the polynomials which are concave upward.
+             The top_width is the full width in energy units at which the
+             magnitude of the polynomial is 100 counts. The default is 0, which
+             means that concave upward polynomials are not used.
+
+         BOTTOM_WIDTH:
+             Specifies the width of the polynomials which are concave downward.
+             The bottom_width is the full width in energy units at which the
+             magnitude of the polynomial is 100 counts. The default is 4.
+
+         EXPONENT:
+             Specifies the power of polynomial which is used. The power must be
+             an integer. The default is 2, i.e. parabolas. Higher exponents,
+             for example EXPONENT=4, results in polynomials with flatter tops
+             and steeper sides, which can better fit spectra with steeply
+             sloping backgrounds.
+
+         TANGENT
+             Specifies that the polynomials are to be tangent to the slope of the
+             spectrum. The default is vertical polynomials. This option works
+             best on steeply sloping spectra. It has trouble in spectra with
+             big peaks because the polynomials are very tilted up inside the
+             peaks.
+
+         COMPRESS:
+             Compression factor to apply before fitting the background.
+             Default=4, which means, for example, that a 2048 channel spectrum
+             will be rebinned to 512 channels before fitting.
+             The compression is done on a temporary copy of the input spectrum,
+             so the input spectrum itself is unchanged.
+             The algorithm works best if the spectrum is compressed before it
+             is fitted. There are two reasons for this. First, the background
+             is constrained to never be larger than the data itself. If the
+             spectrum has negative noise spikes they will cause the fit to be
+             too low. Compression will smooth out such noise spikes.
+             Second, the algorithm requires about 3*N^2 operations, so the time
+             required grows rapidly with the size of the input spectrum. On a
+             200 MHz Pentium it takes about 3 seconds to fit a 2048 channel
+             spectrum with COMPRESS=1 (no compression), but only 0.2 seconds
+             with COMPRESS=4 (the default).
+      PROCEDURE:
+         1) At each channel "i" an n'th degree polynomial which is concave up
+         is fitted. Its equation is
+
+                                       n
+                          (e(i) - e(j))
+         f(j,i) = y(i) + --------------
+                                    n
+                           top_width
+
+         where f(j,i) is the fitted counts in channel j for the polynomial
+         centered in channel i. y(i) is the input counts in channel "i", e(i) is
+         the energy of channel i, e(j) is the energy of channel j, and
+         "top_width" and "n" are user-specified parameters. The background count
+         in channel "j", b(j) is defined as
+
+         b(j) = min ((f(j,i), y(j))
+                 i
+
+         b(j) is thus the smallest fitted polynomial in channel j, or the raw
+         data, whichever is smaller.
+
+         2) After the concave up polynomials have been fitted, a series of
+         concave down polynomials are constructed. At each channel "i" an n'th
+         degree polynomial which is concave up is fitted. The polynomial is slid
+         up from below until it "just touches" some channel of the spectrum. Call
+         this channel "i". The maximum height of the polynomial is thus
+
+                                                  n
+                                     (e(i) - e(j))
+         height(j) = max ( b(j) +  --------------  )
+                      i                          n
+                                     bottom_width
+
+         where bottom_width is a user_specified parameter.
+
+         3) Once the value of height(i) is known the polynomial is fitted. The
+         background counts in each channel are then determined from:
+
+                                                  n
+                                     (e(i) - e(j))
+         bgd(j) = max ( height(i) + --------------
+                   i                             n
+                                     bottom_width
+
+         bgd(j) is thus the maximum counts for any of the concave down
+         polynomials passing though channel j.
+
+         Before the concave-down polynomials are fitted the spectrum at each
+         channel it is possible to subtract out a straight line which is
+         tangent to the spectrum at that channel. Use the /TANGENT qualifier to
+         do this. This is equivalent to fitting a "tilted" polynomial whose
+         apex is tangent to the spectrum at that channel. By fitting
+         polynomials which are tangent rather than vertical the background fit
+         is much improved on spectra with steep slopes.
+
+      OUTPUTS:
+         This function returns an MCA object which is identical to the calling
+         object, except that the data have been replaced by the background fit.
+
+      EXAMPLE:
+        mca = Mca()
+        mca.read_file('mca.001')
+        bgd = mca.fit_background(mca, bottom=6, exponent=4)
+      """
+      REFERENCE_AMPL=100.
+      TINY = 1.E-20
+      HUGE = 1.E20
+      MAX_TANGENT=2
+
+      bgd = copy.copy(self)
+      nchans = len(bgd.data)
+      calibration = bgd.get_calibration()
+      scratch = copy.copy(bgd.get_data())
+      slope = calibration.slope
+
+      # Compress scratch spectrum
+      if (compress > 1):
+         scratch = CARSMath.compress_array(scratch, compress)
+         slope = slope * compress
+         nchans = nchans / compress
+
+      # Copy scratch spectrum to background spectrum
+      bckgnd = copy.copy(scratch)
+
+      # Find maximum counts in input spectrum. This information is used to
+      # limit the size of the function lookup table
+      max_counts = max(scratch)
+
+      #  Fit functions which come down from top
+      if (top_width > 0.):
+         #   First make a lookup table of this function
+         chan_width = top_width / (2. * slope)
+         denom = chan_width**exponent
+         indices = Numeric.arange(float(nchans*2+1)) - nchans
+         power_funct = indices**exponent * (REFERENCE_AMPL / denom)
+         power_funct = Numeric.compress((power_funct <= max_counts), power_funct)
+         max_index = len(power_funct)/2 - 1
+
+         for center_chan in range(nchans):
+            first_chan = max((center_chan - max_index), 0)
+            last_chan = min((center_chan + max_index), (nchans-1))
+            f = first_chan - center_chan + max_index
+            l = last_chan - center_chan + max_index
+            test = scratch[center_chan] + power_funct[f:l+1]
+            sub = bckgnd[first_chan:last_chan+1] 
+            bckgnd[first_chan:last_chan+1] = Numeric.maximum(sub, test)
+
+      # Copy this approximation of background to scratch
+      scratch = copy.copy(bckgnd)
+
+      # Find maximum counts in scratch spectrum. This information is used to
+      #   limit the size of the function lookup table
+      max_counts = max(scratch)
+
+      # Fit functions which come up from below
+      bckgnd = Numeric.arange(float(nchans)) - HUGE
+
+      # First make a lookup table of this function
+      chan_width = bottom_width / (2. * slope)
+      if (chan_width == 0.): denom = TINY
+      else: denom = chan_width**exponent
+      indices = Numeric.arange(float(nchans*2+1)) - nchans
+      power_funct = indices**exponent  * (REFERENCE_AMPL / denom)
+      power_funct = Numeric.compress((power_funct <= max_counts), power_funct)
+      max_index = len(power_funct)/2 - 1
+
+      for center_chan in range(nchans-1):
+         tangent_slope = 0.
+         if (tangent):
+            # Find slope of tangent to spectrum at this channel
+            first_chan = max((center_chan - MAX_TANGENT), 0)
+            last_chan = min((center_chan + MAX_TANGENT), (nchans-1))
+            denom = center_chan - Numeric.arange(float(last_chan - first_chan + 1))
+            tangent_slope = (scratch[center_chan] - 
+                             scratch[first_chan:last_chan+1]) / max(denom, 1)
+            tangent_slope = Numeric.sum(tangent_slope) / (last_chan - first_chan)
+
+         first_chan = max((center_chan - max_index), 0)
+         last_chan = min((center_chan + max_index), (nchans-1))
+         last_chan = max(last_chan, first_chan)
+         nc = last_chan - first_chan + 1
+         lin_offset = scratch[center_chan] + \
+                     (Numeric.arange(float(nc)) - nc/2) * tangent_slope
+
+         # Find the maximum height of a function centered on this channel
+         # such that it is never higher than the counts in any channel
+
+         f = first_chan - center_chan + max_index
+         l = last_chan - center_chan + max_index
+         test = scratch[first_chan:last_chan+1] - lin_offset + \
+                                                            power_funct[f:l+1]
+         height = min(test)
+
+         # We now have the function height. Set the background to the
+         # height of the maximum function amplitude at each channel
+
+         test = height + lin_offset - power_funct[f:l+1]
+         sub = bckgnd[first_chan:last_chan+1]
+         bckgnd[first_chan:last_chan+1] = Numeric.maximum(sub, test)
+
+      # Expand spectrum
+      if (compress > 1): bckgnd = CARSMath.expand_array(bckgnd, compress)
+      bgd.set_data(bckgnd.astype(Numeric.Int))
+      return bgd
+
+
+   ########################################################################
+   def fit_peaks(self, peaks, fit=None, background=None,
+                 output='', spreadsheet=None, 
+                 append=1, **background_kw):
+   #+
+   # NAME:
+   #       MCA::FIT_PEAKS
+   #
+   # PURPOSE:
+   #       This function fits the peaks in the MCA spectrum. It provides a
+   #       convenient interface to the <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A> function.
+   #
+   # CATEGORY:
+   #       MCA object library.
+   #
+   # CALLING SEQUENCE:
+   #       Result = mca->FIT_PEAKS(Peaks)
+   #
+   # INPUTS:
+   #       Peaks:  An array of structures of type {MCA_PEAKS}.  See <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A> and <A HREF="mca_utility_routines.html#READ_PEAKS">READ_PEAKS</A>
+   #               for more information.
+   #
+   # KEYWORD PARAMETERS:
+   #       FIT:
+   #           A structure of type {MCA_FIT} which can be used to control the
+   #           peak fitting.  If this keyword is omitted then the Fit structure
+   #           is created with mca->FIT_INITIALIZE()
+   #       BACKGROUND:
+   #           An MCA object containing the fitted background.  If this keyword
+   #           is omitted then this function will call mca->FIT_BACKGROUND before
+   #           calling FIT_PEAKS.
+   #       OUTPUT:
+   #           The name of an output file to receive the ASCII printout of the
+   #           fit results.  This keyword is simply passed to <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>.
+   #       SPREADSHEET:
+   #           The name of an output file to receive the ASCII output of the
+   #           fit results in spreadsheet format.  This keyword is simply passed to <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>.
+   #       APPEND:
+   #           Flag indicating whether the output and spreadsheet files should be
+   #           appended to or overwritten.  This keyword is simply passed to <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>.
+   #
+   #       In addition to these keywords, all keywords accepted by the <A HREF="mca_utility_routines.html#FIT_BACKGROUND">FIT_BACKGROUND</A>
+   #       function are accepted if the Background keyword is not present, i.e.
+   #       if this function will be calling FIT_BACKGROUND().
+   #
+   # OUTPUTS:
+   #       This function returns an MCA object which is identical to the calling
+   #       object, except that the data have been replaced by the peak fit.
+   #
+   # PROCEDURE:
+   #       The function does the following:
+   #           - Creates the Fit structure with mca->FIT_INITIALIZE() if Fit
+   #             was not passed as a keyword parameter.
+   #           - Fits the background using MCA::FIT_BACKGROUND if Background
+   #             was not passed as a keyword parameter.
+   #           - Extracts the data from the input spectrum and the background
+   #             spectrum.
+   #           - Calls the <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A>
+   #             function with the background subtracted data.
+   #           - Calls <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>
+   #           - Creates a new MCA object using MCA::COPY() and stores the output
+   #             of FIT_PEAKS() in this new object with MCA::SET_DATA.  It then
+   #             returns this new MCA object as the function return value.
+   #
+   # EXAMPLE:
+   #       mca = obj_new('MCA')
+   #       mca->read_file, 'mca.001'
+   #       peaks = read_peaks('mypeaks.pks')
+   #       fit = mca->FIT_PEAKS(peaks, bottom=6, exponent=4)
+   #       mca->plot
+   #       fit->oplot
+   #
+   # MODIFICATION HISTORY:
+   #       Written by:     Mark Rivers, October 23, 1998
+   #       Nov. 1, 1998.  Mark Rivers. Added APPEND keyword
+   #       Jan. 4, 2001.  Mark Rivers. Added SPREADHSHEET keyword.
+   #-
+
+   #   If fit is not a structure of type {MCA_FIT} then initialize it
+       if (not isinstance(fit, McaFit)):
+          fit = McaFit(self)
+
+
+   #   If background is not an object of type MCA then initialize it
+       if (not isinstance(background, Mca)):
+           background = self.fit_background(**background_kw)
+
+       fit.npeaks = len(peaks)
+       background_counts = background.get_data()
+       observed_counts = self.get_data()
+       t0 = time.time()
+       [fit, peaks, fit_counts] = fit_peaks.fit_peaks(fit, peaks,
+                                       observed_counts - background_counts)
+       t1 = time.time()
+       fit_counts = fit_counts + background_counts
+       self.fit_peaks_report(fit, peaks, background, output=output, 
+                        spreadsheet=spreadsheet, append=append, time=t1-t0)
+       fit_mca = copy.copy(self)
+       fit_mca.set_data(fit_counts)
+       return([fit, peaks, fit_mca])
+
+
+   ########################################################################
+   def fit_peaks_report(self, fit, peaks, background, output='',
+                        spreadsheet=None, append=1, time=None):
+   #+
+   # NAME:
+   #       MCA::FIT_PEAKS_REPORT
+   #
+   # PURPOSE:
+   #       This procedure prints out the results from <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A>
+   #
+   # CATEGORY:
+   #       MCA object library.
+   #
+   # CALLING SEQUENCE:
+   #       mca->FIT_PEAKS_REPORT, Fit, Peaks, Background
+   #
+   # INPUTS:
+   #       Fit:  A structure of type {MCA_FIT}.
+   #
+   #       Peaks:  An array of structures of type {MCA_PEAK}.
+   #
+   #       (See <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A> for more information on Fit and Peaks)
+   #
+   #       Background:  An MCA object containing the fitted background spectrum.
+   #
+   # KEYWORD PARAMETERS:
+   #       OUTPUT:
+   #           The name of an output file to receive the ASCII printout of the
+   #           fit results.  If this keyword is omitted then the output will be
+   #           written to stdout, i.e. the IDL output window.  If the Output file
+   #           already exists then the new information will (by default) be appended
+   #           to the file.
+   #
+   #       SPREADSHEET:
+   #           The name of an output file to receive the ASCII output of the
+   #           fit results in a format easily imported into a spreadsheet.  If this
+   #           keyword is omitted then no spreadsheet output will be generated.
+   #           written to stdout, i.e. the IDL output window.
+   #           If the spreadhseet file already exists then the new information will
+   #           (by default) be appended to the file.
+   #
+   #       APPEND:
+   #           Set this keyword to 0 to overwrite the output and spreadsheet files
+   #           rather than to append to them, which is the default behavior.
+   #
+   # EXAMPLE:
+   #       mca = obj_new('MCA')
+   #       mca->read_file, 'mca.001'
+   #       peaks = read_peaks('mypeaks.pks')
+   #       fit = mca->fit_peaks(peaks, fit=fit, background=background, $
+   #                            bottom=6, exponent=4)
+   #       mca->FIT_PEAKS_REPORT, fit, peaks, background, output='mca.001_out'
+   #
+   # MODIFICATION HISTORY:
+   #       Written by:     Mark Rivers, October 23, 1998
+   #       Nov. 1, 1998.  Mark Rivers. Added APPEND keyword
+   #       Nov. 17, 1998  Mark Rivers. Added error string, initial energy.
+   #       Jan. 4, 2001   Mark Rivers. Added spreadsheet file output.
+   #       Jan. 9, 2001   Mark Rivers. Modified spreadsheet output slightly
+   #       Jan. 18, 2001  Mark Rivers. Added energy and FWHM to spreadsheet output
+   #-
+
+      if (append): mode = 'a'
+      else: mode = 'w'
+      if (output == ''): out_fp = sys.stdout
+      else: out_fp = open(output, mode)
+      if (spreadsheet != None): spread_fp = open(spreadsheet, mode)
+      else: spread_fp = None
+
+      SIGMA_TO_FWHM = 2.*Numeric.sqrt(2.*Numeric.log(2.))
+
+      # Compute backgrounds
+      background_counts = background.get_data()
+      nchans = len(self.get_data())
+      for peak in peaks:
+         low = background.energy_to_channel(peak.energy - 
+                 2.*peak.fwhm / SIGMA_TO_FWHM)
+         low = min(max(low, 0), nchans-3)
+         hi  = background.energy_to_channel(peak.energy + 
+                 2.*peak.fwhm / SIGMA_TO_FWHM)
+         hi = min(max(hi, low+1), nchans-1)
+         peak.bgd = Numeric.sum(background_counts[low:hi+1])
+
+      if (out_fp != None):
+         out_fp.write('\n')
+         out_fp.write('*******************************************************\n')
+         out_fp.write( '    Fit of ' + self.name + '\n')
+         out_fp.write('\n')
+         elapsed = self.get_elapsed()
+         out_fp.write('Real time (seconds):            ' +
+                        ('%10.2f' % elapsed.real_time) + '\n')
+         out_fp.write('Live time (seconds):            ' +
+                        ('%10.2f' % elapsed.live_time) + '\n')
+         out_fp.write('Initial FWHM offset, slope:     ' +
+                        ('%10.6f' % fit.initial_fwhm_offset) + 
+                        ('%10.6f' % fit.initial_fwhm_slope) + '\n')
+         out_fp.write('Optimized FWHM offset, slope:   ' +
+                        ('%10.6f' % fit.fwhm_offset) +
+                        ('%10.6f' % fit.fwhm_slope) +  '\n')
+         out_fp.write('Initial energy offset, slope:   ' +
+                        ('%10.6f' % fit.initial_energy_offset) +
+                        ('%10.6f' % fit.initial_energy_slope) + '\n')
+         out_fp.write('Optimized energy offset, slope: ' +
+                        ('%10.6f' % fit.energy_offset) +
+                        ('%10.6f' % fit.energy_slope) + '\n')
+         out_fp.write('# Iterations, function evals:   ' +
+                        ('%10d' % fit.n_iter) +
+                        ('%10d' % fit.n_eval) + '\n')
+         out_fp.write('Chi squared:                    ' +
+                        ('%.6g' % fit.chisqr) + '\n')
+         out_fp.write('Status code:                    ' +
+                        ('%d' % fit.status) + '\n')
+         if (fit.status <= 0):
+            out_fp.write('Error message:               ' +
+                           fit.err_string)
+         if (time != None):
+            out_fp.write('Time to fit:                 ' +
+                        ('%.3f' % time) + '\n')
+             
+         out_fp.write('\n')
+         out_fp.write('        Peak       Energy    FWHM      Area     ' + 
+                'Background   Area/MDL   Area/Bkg\n')
+         out_fp.write('\n')
+         for peak in peaks:
+            if (peak.energy_flag == 0):  esym=' '
+            else: esym='*'
+            if (peak.fwhm_flag == 0):    fsym=' '
+            else: fsym='*'
+            if (peak.ampl_factor == 0.): asym=' '
+            else: asym='*'
+            out_fp.write(
+                  ('%15s' % peak.label) +
+                  ('%10.3f%1s' % (peak.energy, esym)) +
+                  ('%10.4f%1s' % (peak.fwhm, fsym)) +
+                  ('%10.1f%1s' % (peak.area, asym)) +
+                  ('%10.1f' % peak.bgd) +
+                  ('%10.1f' % (peak.area/
+                               max((3.*Numeric.sqrt(peak.bgd)), 1.0))) +
+                  ('%10.1f' % (peak.area/max(peak.bgd, 1.0)))+'\n')
+
+      if (spread_fp != None):
+         el = ('%10.2f' % elapsed.live_time)
+         er = ('%10.2f' % elapsed.real_time)
+         spread_fp.write(self.name+'#Labels#Live time#Real time#')
+         for peak in peaks:
+            spread_fp.write(peak.label+'#')
+         spread_fp.write('\n')
+         spread_fp.write(self.name+'#Energy#'+el+'#'+er+'#')
+         for peak in peaks:
+            spread_fp.write(('%10.3f' % peak.energy)+'#')
+         spread_fp.write('\n')
+         spread_fp.write(self.name+'#FWHM#'+el+'#'+er+'#')
+         for peak in peaks:
+            spread_fp.write(('%10.4f' % peak.fwhm)+'#')
+         spread_fp.write('\n')
+         spread_fp.write(self.name+'#Area#'+el+'#'+er+'#')
+         for peak in peaks:
+            spread_fp.write(('%10.1f' % peak.area)+'#')
+         spread_fp.write('\n')
+         spread_fp.write(self.name+'#Background#'+el+'#'+er+'#')
+         for peak in peaks:
+            spread_fp.write(('%10.1f' % peak.bgd)+'#')
+         spread_fp.write('\n')
+         spread_fp.close()
 
 #######################################################################
 def write_ascii_file(file, data, calibration, elapsed, presets, rois,
@@ -858,224 +1349,6 @@ def read_ascii_file(file):
    return r
 
 ########################################################################
-def fit_background(mca, bottom_width=4., top_width=0., exponent=2, 
-                   tangent=0, compress=4):
-   """
-   PURPOSE:
-      This function fits a background to an MCA spectrum.
-      The background is fitted using an enhanced version of the algorithm
-      published by Kajfosz, J. and Kwiatek, W .M. (1987)  "Non-polynomial
-      approximation of background in x-ray spectra." Nucl. Instrum. Methods
-      B22, 78-81.
-   KEYWORD PARAMETERS:
-      TOP_WIDTH:
-          Specifies the width of the polynomials which are concave upward.
-          The top_width is the full width in energy units at which the
-          magnitude of the polynomial is 100 counts. The default is 0, which
-          means that concave upward polynomials are not used.
-
-      BOTTOM_WIDTH:
-          Specifies the width of the polynomials which are concave downward.
-          The bottom_width is the full width in energy units at which the
-          magnitude of the polynomial is 100 counts. The default is 4.
-
-      EXPONENT:
-          Specifies the power of polynomial which is used. The power must be
-          an integer. The default is 2, i.e. parabolas. Higher exponents,
-          for example EXPONENT=4, results in polynomials with flatter tops
-          and steeper sides, which can better fit spectra with steeply
-          sloping backgrounds.
-
-      TANGENT
-          Specifies that the polynomials are to be tangent to the slope of the
-          spectrum. The default is vertical polynomials. This option works
-          best on steeply sloping spectra. It has trouble in spectra with
-          big peaks because the polynomials are very tilted up inside the
-          peaks.
-
-      COMPRESS:
-          Compression factor to apply before fitting the background.
-          Default=4, which means, for example, that a 2048 channel spectrum
-          will be rebinned to 512 channels before fitting.
-          The compression is done on a temporary copy of the input spectrum,
-          so the input spectrum itself is unchanged.
-          The algorithm works best if the spectrum is compressed before it
-          is fitted. There are two reasons for this. First, the background
-          is constrained to never be larger than the data itself. If the
-          spectrum has negative noise spikes they will cause the fit to be
-          too low. Compression will smooth out such noise spikes.
-          Second, the algorithm requires about 3*N^2 operations, so the time
-          required grows rapidly with the size of the input spectrum. On a
-          200 MHz Pentium it takes about 3 seconds to fit a 2048 channel
-          spectrum with COMPRESS=1 (no compression), but only 0.2 seconds
-          with COMPRESS=4 (the default).
-   PROCEDURE:
-      1) At each channel "i" an n'th degree polynomial which is concave up
-      is fitted. Its equation is
-
-                                    n
-                       (e(i) - e(j))
-      f(j,i) = y(i) + --------------
-                                 n
-                        top_width
-
-      where f(j,i) is the fitted counts in channel j for the polynomial
-      centered in channel i. y(i) is the input counts in channel "i", e(i) is
-      the energy of channel i, e(j) is the energy of channel j, and
-      "top_width" and "n" are user-specified parameters. The background count
-      in channel "j", b(j) is defined as
-
-      b(j) = min ((f(j,i), y(j))
-              i
-
-      b(j) is thus the smallest fitted polynomial in channel j, or the raw
-      data, whichever is smaller.
-
-      2) After the concave up polynomials have been fitted, a series of
-      concave down polynomials are constructed. At each channel "i" an n'th
-      degree polynomial which is concave up is fitted. The polynomial is slid
-      up from below until it "just touches" some channel of the spectrum. Call
-      this channel "i". The maximum height of the polynomial is thus
-
-                                               n
-                                  (e(i) - e(j))
-      height(j) = max ( b(j) +  --------------  )
-                   i                          n
-                                  bottom_width
-
-      where bottom_width is a user_specified parameter.
-
-      3) Once the value of height(i) is known the polynomial is fitted. The
-      background counts in each channel are then determined from:
-
-                                               n
-                                  (e(i) - e(j))
-      bgd(j) = max ( height(i) + --------------
-                i                             n
-                                  bottom_width
-
-      bgd(j) is thus the maximum counts for any of the concave down
-      polynomials passing though channel j.
-
-      Before the concave-down polynomials are fitted the spectrum at each
-      channel it is possible to subtract out a straight line which is
-      tangent to the spectrum at that channel. Use the /TANGENT qualifier to
-      do this. This is equivalent to fitting a "tilted" polynomial whose
-      apex is tangent to the spectrum at that channel. By fitting
-      polynomials which are tangent rather than vertical the background fit
-      is much improved on spectra with steep slopes.
-
-   OUTPUTS:
-      This function returns an MCA object which is identical to the calling
-      object, except that the data have been replaced by the background fit.
-
-   EXAMPLE:
-     mca = Mca()
-     mca.read_file('mca.001')
-     bgd = mca.fit_background(mca, bottom=6, exponent=4)
-   """
-   REFERENCE_AMPL=100.
-   TINY = 1.E-20
-   HUGE = 1.E20
-   MAX_TANGENT=2
-
-   bgd = copy.copy(mca)
-   nchans = len(bgd.data)
-   calibration = bgd.get_calibration()
-   scratch = copy.copy(bgd.get_data())
-   slope = calibration.slope
-
-   # Compress scratch spectrum
-   if (compress > 1):
-      scratch = CARSMath.compress_array(scratch, compress)
-      slope = slope * compress
-      nchans = nchans / compress
-
-   # Copy scratch spectrum to background spectrum
-   bckgnd = copy.copy(scratch)
-
-   # Find maximum counts in input spectrum. This information is used to
-   # limit the size of the function lookup table
-   max_counts = max(scratch)
-
-   #  Fit functions which come down from top
-   if (top_width > 0.):
-      #   First make a lookup table of this function
-      chan_width = top_width / (2. * slope)
-      denom = chan_width**exponent
-      indices = Numeric.arange(float(nchans*2+1)) - nchans
-      power_funct = indices**exponent * (REFERENCE_AMPL / denom)
-      power_funct = Numeric.compress((power_funct <= max_counts), power_funct)
-      max_index = len(power_funct)/2 - 1
-
-      for center_chan in range(nchans):
-         first_chan = max((center_chan - max_index), 0)
-         last_chan = min((center_chan + max_index), (nchans-1))
-         f = first_chan - center_chan + max_index
-         l = last_chan - center_chan + max_index
-         test = scratch[center_chan] + power_funct[f:l+1]
-         sub = bckgnd[first_chan:last_chan+1] 
-         bckgnd[first_chan:last_chan+1] = Numeric.maximum(sub, test)
-
-   # Copy this approximation of background to scratch
-   scratch = copy.copy(bckgnd)
-
-   # Find maximum counts in scratch spectrum. This information is used to
-   #   limit the size of the function lookup table
-   max_counts = max(scratch)
-
-   # Fit functions which come up from below
-   bckgnd = Numeric.arange(float(nchans)) - HUGE
-
-   # First make a lookup table of this function
-   chan_width = bottom_width / (2. * slope)
-   if (chan_width == 0.): denom = TINY
-   else: denom = chan_width**exponent
-   indices = Numeric.arange(float(nchans*2+1)) - nchans
-   power_funct = indices**exponent  * (REFERENCE_AMPL / denom)
-   power_funct = Numeric.compress((power_funct <= max_counts), power_funct)
-   max_index = len(power_funct)/2 - 1
-
-   for center_chan in range(nchans-1):
-      tangent_slope = 0.
-      if (tangent):
-         # Find slope of tangent to spectrum at this channel
-         first_chan = max((center_chan - MAX_TANGENT), 0)
-         last_chan = min((center_chan + MAX_TANGENT), (nchans-1))
-         denom = center_chan - Numeric.arange(float(last_chan - first_chan + 1))
-         tangent_slope = (scratch[center_chan] - 
-                          scratch[first_chan:last_chan+1]) / max(denom, 1)
-         tangent_slope = Numeric.sum(tangent_slope) / (last_chan - first_chan)
-
-      first_chan = max((center_chan - max_index), 0)
-      last_chan = min((center_chan + max_index), (nchans-1))
-      last_chan = max(last_chan, first_chan)
-      nc = last_chan - first_chan + 1
-      lin_offset = scratch[center_chan] + \
-                  (Numeric.arange(float(nc)) - nc/2) * tangent_slope
-
-      # Find the maximum height of a function centered on this channel
-      # such that it is never higher than the counts in any channel
-
-      f = first_chan - center_chan + max_index
-      l = last_chan - center_chan + max_index
-      test = scratch[first_chan:last_chan+1] - lin_offset + \
-                                                         power_funct[f:l+1]
-      height = min(test)
-
-      # We now have the function height. Set the background to the
-      # height of the maximum function amplitude at each channel
-
-      test = height + lin_offset - power_funct[f:l+1]
-      sub = bckgnd[first_chan:last_chan+1]
-      bckgnd[first_chan:last_chan+1] = Numeric.maximum(sub, test)
-
-   # Expand spectrum
-   if (compress > 1): bckgnd = CARSMath.expand_array(bckgnd, compress)
-   bgd.set_data(bckgnd.astype(Numeric.Int))
-   return bgd
-
-########################################################################
 def read_peaks(file):
    """
    Reads a disk file into an array of structures of type 
@@ -1143,7 +1416,7 @@ def read_peaks(file):
       if (q >= 0): 
          label = s[0:q].upper()
          if (label == "BACKGROUND_EXPONENT"):
-            background.exponent = float(s[q+1:])
+            background.exponent = int(float(s[q+1:]))
          elif (label == "BACKGROUND_TOP_WIDTH"):
             background.top_width = float(s[q+1:])
          elif (label == "BACKGROUND_BOTTOM_WIDTH"):
@@ -1236,3 +1509,4 @@ def write_peaks(file, peaks, background=None):
    fp = open(file, 'w')
    fp.writelines(lines)
    fp.close()
+
