@@ -1,21 +1,26 @@
-#   MED
-#
-#   Simple Graphical User Interface to Multi-Element-Detector
-#   M Newville  2001-08-Nov
-#   Convered from IDL to Python, Mark Rivers, August 20, 2002
-#
+"""
+Simple Graphical User Interface to Multi-Element-Detector
+Author:        M Newville  Nov. 8, 2001
+               Converted from IDL to Python, Mark Rivers, August 20, 2002
+
+Modifications:
+   Sept. 24, 2002.  MLR
+      - Fixed bug in opening a new mcaDisplay.
+      - Change directory when saving a file so location becomes default
+"""
+
 from Tkinter import *
 import tkFileDialog
 import Pmw
 import os
-from mcaDisplay import mcaDisplay
-from epicsPV import epicsPV
-from myTkTop import myTkTop
-from epicsMed import epicsMed
-from localMedLayout import localMedLayout
+import mcaDisplay
+import epicsPV
+import myTkTop
+import epicsMed
+import localMedLayout
 
 class medDisplay:
-   def __init__(self, detector='13GE1:med:', element=7):
+   def __init__(self, detector='13GE1:med:', element=1):
       class widgets:
          pass
       self.widgets = widgets()
@@ -25,14 +30,14 @@ class medDisplay:
       self.path = '.'
       self.file = 'test.xrf'
       self.pvs = {}
-      self.pvs['ElapsedReal'] = epicsPV(detector + 'ElapsedReal', wait=0)
-      self.pvs['PresetReal']  = epicsPV(detector + 'PresetReal', wait=0)
-      self.pvs['StartAll']    = epicsPV(detector + 'StartAll', wait=0)
-      self.pvs['StopAll']     = epicsPV(detector + 'StopAll', wait=0)
-      self.pvs['EraseAll']    = epicsPV(detector + 'EraseAll', wait=0)
-      self.pvs['EraseStart']  = epicsPV(detector + 'EraseStart', wait=0)
-      self.pvs['Acquiring']  = epicsPV(detector + 'Acquiring', wait=0)
-      self.pvs['mca1.ERTM']   = epicsPV(detector + 'mca1.ERTM', wait=0)
+      self.pvs['ElapsedReal'] = epicsPV.epicsPV(detector + 'ElapsedReal', wait=0)
+      self.pvs['PresetReal']  = epicsPV.epicsPV(detector + 'PresetReal', wait=0)
+      self.pvs['StartAll']    = epicsPV.epicsPV(detector + 'StartAll', wait=0)
+      self.pvs['StopAll']     = epicsPV.epicsPV(detector + 'StopAll', wait=0)
+      self.pvs['EraseAll']    = epicsPV.epicsPV(detector + 'EraseAll', wait=0)
+      self.pvs['EraseStart']  = epicsPV.epicsPV(detector + 'EraseStart', wait=0)
+      self.pvs['Acquiring']  = epicsPV.epicsPV(detector + 'Acquiring', wait=0)
+      self.pvs['mca1.ERTM']   = epicsPV.epicsPV(detector + 'mca1.ERTM', wait=0)
       self.pvs['mca1.ERTM'].pend_io()
       
       self.preset_real = self.pvs['PresetReal'].getw()
@@ -40,7 +45,7 @@ class medDisplay:
       self.update_time = .5
       
       # menus
-      top = myTkTop()
+      top = myTkTop.myTkTop()
       top.title('medDisplay')
       self.widgets.top = top
       frame = Frame(top, borderwidth=1, relief='raised')
@@ -131,12 +136,13 @@ class medDisplay:
       height = 230
       area = Frame(left_frame, width=width, height=height); area.pack(side=TOP)
       self.widgets.area = area
-      self.detector_positions = localMedLayout()
+      self.detector_positions = localMedLayout.localMedLayout()
+      self.n_detectors = len(self.detector_positions)
       button_width=1
       button_height=1
       self.geom_state= 0
       self.widgets.det_buttons = []
-      for d in range(len(self.detector_positions)):
+      for d in range(self.n_detectors):
          t = Button(area, text=str(d+1), width=button_width,
                     height=button_height,
                     command = lambda s=self, d=d: s.menu_element(d+1))
@@ -148,10 +154,10 @@ class medDisplay:
       # status message
 
       self.widgets.elapsed_real.configure(text=' ')
-      self.mcaDisplay = mcaDisplay()
+      self.mcaDisplay = mcaDisplay.mcaDisplay()
       self.mca = self.detector + 'mca' + str(self.element)
       self.mcaDisplay.open_detector(self.mca)
-      self.med = epicsMed(self.detector)
+      self.med = epicsMed.epicsMed(self.detector, n_detectors=self.n_detectors)
 
       # when objects are really created, report 'Ready'.
       self.widgets.status.configure(text='Ready')
@@ -239,7 +245,7 @@ class medDisplay:
 
    ############################################################
    def menu_new_display(self):
-       self.mcaDisplay = mcaDisplay()
+       self.mcaDisplay = mcaDisplay.mcaDisplay()
        mca  = self.detector + 'mca' + str(self.element).strip()
        self.mcaDisplay.open_detector(mca)
 
@@ -252,8 +258,8 @@ class medDisplay:
                                 filetypes=[('All files','*.xrf')])
       if (file == ''): return
       self.path = os.path.dirname(file)
+      os.chdir(self.path)
       self.file = os.path.basename(file)
-      #cd, path
       self.widgets.status.configure(text='Saving Spectra...')
       self.widgets.elapsed_real.configure(text=' ')
       self.med.write_file(file)
