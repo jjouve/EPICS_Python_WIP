@@ -1,8 +1,17 @@
-#  This module contains miscellaneous math functions
-#
-#  Author:  Mark Rivers
-#  Created: Sept. 16, 2002
-#  Modifications:
+"""
+This module contains miscellaneous math functions
+
+Author:
+   Mark Rivers
+
+Created: 
+   Sept. 16, 2002
+
+Modifications:
+   Sept. 26, 2002  MLR
+      - Added newton function from scipy.optimize.  Put here so users don't
+        need scipy
+"""
 
 import Numeric
 import LinearAlgebra
@@ -168,4 +177,50 @@ def expand_array(array, expand, sample=0):
    # Replace the last "expand" entries with the last entry of original
    for i in range(1,expand): temp[-i]=array[-1]
    return temp
+
+##############################################################
+def newton(func, x0, fprime=None, args=(), tol=1.48e-8, maxiter=50):
+    """
+    newton is taken directly from scipy.optimize.minpack.py.  
+    I have extracted it here so that users of my software don't have to install 
+    scipy.  This may change in the future as I use more scipy features, and 
+    scipy will be required
+
+    Given a function of a single variable and a starting point,
+    find a nearby zero using Newton-Raphson.
+    fprime is the derivative of the function.  If not given, the
+    Secant method is used.
+    """
+    if fprime is not None:
+        p0 = x0
+        for iter in range(maxiter):
+            myargs = (p0,)+args
+            fval = func(*myargs)
+            fpval = fprime(*myargs)
+            if fpval == 0:
+                print "Warning: zero-derivative encountered."
+                return p0
+            p = p0 - func(*myargs)/fprime(*myargs)
+            if abs(p-p0) < tol:
+                return p
+            p0 = p
+    else: # Secant method
+        p0 = x0
+        p1 = x0*(1+1e-4)
+        q0 = apply(func,(p0,)+args)
+        q1 = apply(func,(p1,)+args)
+        for iter in range(maxiter):
+            try:                
+                p = p1 - q1*(p1-p0)/(q1-q0)
+            except ZeroDivisionError:
+                if p1 != p0:
+                    print "Tolerance of %g reached" % (p1-p0)
+                return (p1+p0)/2.0
+            if abs(p-p0) < tol:
+                return p
+            p0 = p1
+            q0 = q1
+            p1 = p
+            q1 = apply(func,(p1,)+args)
+    raise RuntimeError, "Failed to converge after %d iterations, value is %f" % (maxiter,p)
 
