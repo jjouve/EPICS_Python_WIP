@@ -2,12 +2,22 @@
 This module defines a device-independent MultiChannel Analyzer (MCA) class,
 and a number of support classes.
 
-Author:         Mark Rivers
-Created:        Sept. 16, 2002.  Based on my earlier IDL code.
+Author:
+   Mark Rivers
+   
+Created:
+   Sept. 16, 2002.  Based on my earlier IDL code.
+
 Modifications:
    Sept. 24, 2002 MLR
       - Fixed bug in saving ROIs in Meds
       - Fixed bug reading environment variables
+   Sept. 25, 2002
+      - Changed McaPeak.get_calibration to McaPeak.update, make more fields
+        consistent.
+      - Added McaPeak.ignore field to fix problem with other fields getting
+        clobbered in fitPeaks.
+      - Fixed serious bug in .d_to_channel()
 """
 
 import Numeric
@@ -83,9 +93,11 @@ class McaFit:
       self.background =   McaBackground()  # Background object
       self.peaks =        []     # List of McaPeak() objects
 
-   def get_calibration(self, mca):
+   def update(self, mca):
       """
-      Copies the Mca calibration offset and slope to the initial values in self
+      Updates the McaFit object to be consistent with the Mca object.
+      The calibration offset and slope are copied to the initial values,
+      and the number of channels is set.
 
       Inputs:
          mca:
@@ -94,6 +106,9 @@ class McaFit:
       cal = mca.get_calibration()
       self.initial_energy_offset = cal.offset
       self.initial_energy_slope = cal.slope
+      data = mca.get_data()
+      self.nchans = len(data)
+      self.last_chan = self.nchans-1
 
 ########################################################################
 class McaPeak:
@@ -147,6 +162,7 @@ class McaPeak:
       self.ampl =           0.  # Peak amplitude
       self.area =           0.  # Area of peak
       self.bgd =            0.  # Background under peak
+      self.ignore =         0   # Don't fit peak
 
 ########################################################################
 class McaROI:
@@ -800,7 +816,7 @@ class Mca:
          mca = Mca('mca.001')
          channel = mca.d_to_chan(1.598)
       """
-      e = 12.398 / (2. * d * math.sin(self.calibration.two_theta*math.pi/180.))
+      e = 12.398 / (2. * d * math.sin(self.calibration.two_theta*math.pi/180./2.))
       return self.energy_to_channel(e, clip=clip)
 
    ########################################################################
@@ -1171,7 +1187,7 @@ class Mca:
          fit = McaFit(self)
 
       # Copy the calibration parameters to fit
-      fit.get_calibration(self)
+      fit.update(self)
 
       # If background is not an object of type Mca then initialize it
       if (not isinstance(background, Mca)):
@@ -1658,6 +1674,7 @@ def read_peaks(file):
    peaks = []
    background = McaBackground()
    for s in lines:
+      s = s.strip()
       q = s.find(',')
       if (q >= 0): 
          label = s[0:q].upper()
