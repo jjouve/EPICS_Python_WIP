@@ -1,3 +1,15 @@
+"""
+This module defines a device-independent MultiChannel Analyzer (MCA) class,
+and a number of support classes.
+
+Author:         Mark Rivers
+Created:        Sept. 16, 2002.  Based on my earlier IDL code.
+Modifications:
+   Sept. 24, 2002 MLR
+      - Fixed bug in saving ROIs in Meds
+      - Fixed bug reading environment variables
+"""
+
 import Numeric
 import string
 import copy
@@ -6,10 +18,22 @@ import sys
 import time
 import CARSMath
 import Xrf
-import fit_peaks
+import fitPeaks
 
 ########################################################################
 class McaBackground:
+   """
+   Defines the parameters for fitting backgrounds in Mca objects.
+   Fields and default values:
+      .exponent     = 2
+      .top_width    = 0.
+      .bottom_width = 4.
+      .tangent      = 0
+      .compress     = 4
+      
+   See the documentation on fit_background() for information on the meaning
+   of these fields.
+   """
    def __init__(self):
       self.exponent     = 2
       self.top_width    = 0.
@@ -19,6 +43,9 @@ class McaBackground:
 
 ########################################################################
 class McaFit:
+   """
+   Class used for the global input and output parameters for fit_peaks.
+   """
    def __init__(self, mca=None):
       if (mca == None): mca=Mca()
       calibration = mca.get_calibration()
@@ -56,8 +83,48 @@ class McaFit:
       self.background =   McaBackground()  # Background object
       self.peaks =        []     # List of McaPeak() objects
 
+   def get_calibration(self, mca):
+      """
+      Copies the Mca calibration offset and slope to the initial values in self
+
+      Inputs:
+         mca:
+            An Mca object to copy the calibration from
+      """
+      cal = mca.get_calibration()
+      self.initial_energy_offset = cal.offset
+      self.initial_energy_slope = cal.slope
+
 ########################################################################
 class McaPeak:
+   """
+   Class for definiing the input and output parameters for each peak in
+   fit_peaks().
+   Input fields set bfore calling fit_peaks(), defaults and descriptions
+      .label =       ""      # Peak label
+      .self.energy_flag = 0  # Flag for fitting energy
+                             #   0 = Fix energy 
+                             #   1 = Optimize energy
+      .fwhm_flag =   0       # Flag for fitting FWHM
+                             #   0 = Fix FWHM to global curve
+                             #   1 = Optimize FWHM
+                             #   2 = Fix FWHM to input value
+      .ampl_factor = 0.      # Fixed amplitude ratio to previous peak
+                             #   0.  = Optimize amplitude of this peak
+                             #   >0. = Fix amplitude to this value relative
+                             #         to amplitude of previous free peak
+                             #  -1.0 = Fix amplitude at 0.0
+      .initial_energy = 0.   # Peak energy
+      .initial_fwhm =   0.   # Peak FWHM
+      .initial_ampl =   0.   # Peak amplitude
+      
+   Output fields returned by fit_peaks(), defaults and descriptions
+      .energy =         0.   # Peak energy
+      .fwhm =           0.   # Peak FWHM
+      .ampl =           0.   # Peak amplitude
+      .area =           0.   # Area of peak
+      .bgd =            0.   # Background under peak
+   """
    def __init__(self):
       self.label =       ""  # Peak label
       self.energy_flag = 0   # Flag for fitting energy
@@ -83,8 +150,27 @@ class McaPeak:
 
 ########################################################################
 class McaROI:
+   """
+   Class that defines a Region-Of-Interest (ROI)
+   Fields
+      .left      # Left channel or energy
+      .right     # Right channel or energy
+      .centroid  # Centroid channel or energy
+      .fwhm      # Width
+      .bgd_width # Number of channels to use for background subtraction
+      .use       # Flag: should the ROI should be used for energy calibration
+      .preset    # Is this ROI controlling preset acquisition
+      .label     # Name of the ROI
+      .d_spacing # Lattice spacing if a diffraction peak
+      .energy    # Energy of the centroid for energy calibration
+   """
    def __init__(self, left=0., right=0., centroid=0., fwhm=0., bgd_width=0,
                       use=1, preset=0, label='', d_spacing=0., energy=0.):
+      """
+      Keywords:
+         There is a keyword with the same name as each attribute that can be
+         used to initialize the ROI when it is created.
+      """
       self.left = left
       self.right = right
       self.centroid = centroid
@@ -95,14 +181,33 @@ class McaROI:
       self.label = label
       self.d_spacing = d_spacing
       self.energy = energy
-   # Comparison operator.  The .left field is used to define ROI ordering
    def __cmp__(self, other):
+      """
+      Comparison operator.  The .left field is used to define ROI ordering
+      """ 
       return (self.left - other.left)
 
 ########################################################################
 class McaCalibration:
+   """
+   Class defining an Mca calibration.  The calibration equation is
+      energy = .offset + .slope*channel + .quad*channel**2
+   where the first channel is channel 0, and thus the energy of the first
+   channel is .offset.
+   
+   Fields:
+      .offset    # Offset
+      .slope     # Slope
+      .quad      # Quadratic
+      .units     # Calibration units, a string
+      .two_theta # 2-theta of this Mca for energy-dispersive diffraction
+   """
    def __init__(self, offset=0., slope=1.0, quad=0., units='keV', 
                       two_theta=10.):
+      """
+      There is a keyword with the same name as each field, so the object can
+      be initialized when it is created.
+      """
       self.offset = offset
       self.slope = slope
       self.quad = quad
@@ -111,6 +216,16 @@ class McaCalibration:
 
 ########################################################################
 class McaElapsed:
+   """
+   The elapsed time and counts for an Mca.
+   
+   Fields:
+      .start_time   # Start time and date, a string
+      .live_time    # Elapsed live time in seconds
+      .real_time    # Elapsed real time in seconds
+      .read_time    # Time that the Mca was last read in seconds
+      .total_counts # Total counts between the preset start and stop channels
+   """
    def __init__(self, start_time='', live_time=0., real_time=0., 
                       read_time=0., total_counts=0.):
       self.start_time = start_time
@@ -121,6 +236,22 @@ class McaElapsed:
 
 ########################################################################
 class McaPresets:
+   """
+   The preset time and counts for an Mca.
+   
+   Fields:
+      .live_time       # Preset live time in seconds
+      .real_time       # Preset real time in seconds
+      .read_time       # Time that the Mca was last read in seconds
+      .total_counts    # Preset total counts between the preset
+                       #    start and stop channels
+      .start_channel   # Start channel for preset counts
+      .end_channel     # End channel for preset counts
+      .dwell           # Dwell time per channel for MCS devices
+      .channel_advance # Channel advance source for MCS hardware:
+                       #    0=internal, 1=external
+      .prescale        # Prescaling setting for MCS hardware
+   """
    def __init__(self):
       self.live_time = 0.
       self.real_time = 0.
@@ -133,6 +264,19 @@ class McaPresets:
 
 ########################################################################
 class McaEnvironment:
+   """
+   The "environment" or related parameters for an Mca.  These might include
+   things like motor positions, temperature, anything that describes the
+   experiment.
+
+   An Mca object has an associated list of McaEnvironment objects, since there
+   are typically many such parameters required to describe an experiment.
+
+   Fields:
+      .name         # A string name of this parameter, e.g. "13IDD:m1"
+      .value        # A string value of this parameter,  e.g. "14.223"
+      .description  # A string description of this parameter, e.g. "X stage"
+   """
    def __init__(self, name='', value='', description=''):
       self.name = name
       self.value = value
@@ -140,20 +284,18 @@ class McaEnvironment:
 
 ########################################################################
 class Mca:
+   """ Device-independent MultiChannel Analyzer (MCA) class """
    def __init__(self, file=None, **filekw):
       """
-      CALLING SEQUENCE:
-         m = Mca()
-      INPUTS:
-         file:  Optional name of a file to read into the new Mca object.
-      OUTPUTS:
-         Returns an instance of the Python class "Mca".
-      EXAMPLE:
-         from Mca import *
+      Creates new Mca object.  The data are initially all zeros, and the number
+      of channels is 2048.
+      
+      Keywords:
+         file:
+            Name of a file to read into the new Mca object with read_file()
+            
+      Example:
          m = Mca('my_spectrum.dat')
-      MODIFICATION HISTORY:
-         Written by:     Mark Rivers, May 11, 2002, based on IDL code from
-                         October 1, 1997
       """
       self.name = ''
       self.n_detectors = 1
@@ -168,39 +310,105 @@ class Mca:
          self.read_file(file, **filekw)
 
    ########################################################################
+   def __copy__(self):
+      """
+      Makes a "shallow" copy of an Mca instance, using copy.copy() on all of
+      the attributes of the Mca instance.  The .rois and .environment attributes
+      will still point to the same values, because they are lists.
+      """
+      new = Mca()
+      new.data = copy.copy(self.data)
+      new.rois = copy.copy(self.rois)
+      new.elapsed = copy.copy(self.elapsed)
+      new.calibration = copy.copy(self.calibration)
+      new.presets = copy.copy(self.presets)
+      new.environment = copy.copy(self.environment)
+      return(new)
+
+
+   ########################################################################
+   def __deepcopy__(self, visit):
+      """
+      Makes a "deep" copy of an Mca instance, using copy.deepcopy() on all of
+      the attributes of the Mca instance. All of the attribute will point to
+      new objects.
+      """
+      new = Mca()
+      new.data = copy.copy(self.data)
+      new.rois = copy.deepcopy(self.rois, visit)
+      new.elapsed = copy.copy(self.elapsed)
+      new.calibration = copy.copy(self.calibration)
+      new.presets = copy.copy(self.presets)
+      new.environment = copy.deepcopy(self.environment, visit)
+      return(new)
+
+   ########################################################################
    def get_calibration(self):
+      """ Returns the Mca calibration, as an McaCalibration object """
       return self.calibration
 
    ########################################################################
    def set_calibration(self, calibration):
+      """
+      Sets the Mca calibration.
+      
+      Inputs:
+         calibration:
+            An McaCalibration object
+      """
       self.calibration = calibration
 
    ########################################################################
    def get_presets(self):
+      """ Returns the Mca presets, as an McaCPresets object """
       return self.presets
 
    ########################################################################
    def set_presets(self, presets):
+      """
+      Sets the Mca presets.
+      
+      Inputs:
+         presets:
+            An McaPresets object
+      """
       self.presets = presets
 
    ########################################################################
    def get_elapsed(self):
+      """ Returns the Mca elapsed parameters, as an McaElapsed object """
       return self.elapsed
 
    ########################################################################
    def set_elapsed(self, elapsed):
+      """
+      Sets the Mca elapsed parameters.
+      
+      Inputs:
+         elapsed:
+            An McaElapsed object
+      """
       self.elapsed = elapsed
 
    ########################################################################
    def get_name(self):
+      """ Returns the Mca name as a string """
       return self.name
 
    ########################################################################
    def set_name(self, name):
+      """
+      Sets the Mca name.
+      
+      Inputs:
+         name:
+            A string
+      """
       self.name = name
 
    ########################################################################
    def get_rois(self, energy=0):
+      """ Returns the Mca ROIS, as a list of McaROI objects """
       rois = copy.copy(self.rois)
       if (energy != 0):
          for roi in rois:
@@ -211,20 +419,22 @@ class Mca:
    ########################################################################
    def set_rois(self, rois, energy=0):
       """
-      PURPOSE:
-         This procedure sets the region-of-interest parameters for the MCA.
-         The rois information is contained in an object of class MCA_ROIS.
-         MCA_ROIS.  This routine is not needed if the information in the
-         McaRoi class is already in channel units.  It is needed if the
-         information in the .left and .right fields is in terms of energy.
-      CALLING SEQUENCE:
-         mca.set_rois(rois, energy=1)
-      INPUTS:
-         rois:  An list of objects of type McaROI
-      KEYWORD INPUTS:
-         ENERGY: Set this flag to indicate that the .left and .right fields
-                 of rois are in units of energy rather than channel number.
-      EXAMPLE:
+      Sets the region-of-interest parameters for the MCA.
+      The rois information is contained in an object of class McaRoi.
+      This routine is not needed if the information in the McaRoi instance
+      is already in channel units.  It is needed if the information in the
+      .left and .right fields is in terms of energy.
+
+      Inputs:
+         rois:
+            A list of objects of type McaROI
+            
+      Keywords:
+         energy:
+            Set this flag to indicate that the .left and .right fields
+            of rois are in units of energy rather than channel number.
+            
+      Example:
         mca = Mca('mca.001')
         r1 = McaROI()
         r1.left = 5.4
@@ -245,23 +455,23 @@ class Mca:
    ########################################################################
    def get_roi_counts(self, background_width=1):
       """
-      PURPOSE:
-         This method returns the net and total counts of each
-         region-of-interest in the MCA.
-      CALLING SEQUENCE:
-         total, net = mca.get_roi_counts(background_width=1)
-      KEYWORD INPUTS:
+      Returns a tuple (total, net) containing the total and net counts of
+      each region-of-interest in the MCA.
+
+      Kyetwords:
          background_width:
             Set this keyword to set the width of the background region on either
             side of the peaks when computing net counts.  The default is 1.
-      OUTPUTS:
+            
+      Outputs:
           total:  The total counts in each ROI.
           net:    The net counts in each ROI.
 
           The dimension of each list is NROIS, where NROIS
           is the number of currently defined ROIs for this MCA.  It returns
           and empty list for both if NROIS is zero.
-      EXAMPLE:
+          
+      Example:
          mca = Mca('mca.001')
          total, net = mca.get_roi_counts(background_width=3)
          print 'Net counts = ', net
@@ -291,31 +501,48 @@ class Mca:
 
    ########################################################################
    def get_environment(self):
+      """
+      Returns a list of McaEnvironment objects that contain the environment
+      parameters of the Mca.
+      """
       return self.environment
 
    ########################################################################
    def set_environment(self, environment):
+      """
+      Copies a list of McaEnvironment objects to the Mca object.
+
+      Inputs:
+         environment:
+            A list of McaEnvironment objects.
+      """
       self.environment = environment
 
    ########################################################################
    def get_data(self):
+      """ Returns the data (counts) from the Mca """
       return self.data
 
    ########################################################################
    def set_data(self, data):
+      """
+      Copies an array of data (counts) to the Mca.
+
+      Inputs:
+         data:
+            A Numeric array of data (counts).
+      """
       self.data = data
 
    ########################################################################
    def get_energy(self):
       """
-      PURPOSE:
-        This function returns a list containing the energy of each 
-        channel in the MCA spectrum.
-      CALLING SEQUENCE:
-        Result = m.get_energy()
-      PROCEDURE:
-         This routine simply returns mca.channel_to_energy() for each channel
-      EXAMPLE:
+      Returns a list containing the energy of each channel in the MCA spectrum.
+
+      Procedure:
+         Simply returns mca.channel_to_energy() for each channel
+         
+      Example:
           from Mca import *
           mca = Mca('mca.001')
           energy = mca.get_energy()
@@ -326,25 +553,25 @@ class Mca:
    ########################################################################
    def initial_calibration(self, energy):
       """
-      PURPOSE:
-         Performs an initial coarse energy calibration of the
-         MCA, setting only the slope, and setting the offset parameter to 0.
-      CALLING SEQUENCE:
-         mca.initial_calibration(energy)
-      INPUTS:
-         energy: The energy of the biggest peak in the MCA spectrum
-      PROCEDURE:
+      Performs an initial coarse energy calibration of the Mca, setting only
+      the slope, and setting the offset parameter to 0.
+
+      Inputs:
+         energy: The energy of the biggest peak in the MCA spectrum.
+         
+      Procedure:
          This routine does the following:
             1) Sets the offset coefficient to 0.0
             2) Sets the quadratic coefficient to 0.0
             3) Determines which channel contains the most counts, PEAK_CHAN
             4) Sets the slope equal to the input energy divided by PEAK_CHAN
-      EXAMPLE:
+            
+      Example:
          from Mca import *
          mca = Mca('mca.001')
          mca.initial_calibration(20.1)
       """
-      peak_chan = argmax(self.data)
+      peak_chan = Numeric.argmax(self.data)
       peak_chan = max(peak_chan,1)
       self.calibration.offset = 0.
       self.calibration.slope = float(energy)/peak_chan
@@ -353,17 +580,18 @@ class Mca:
    ########################################################################
    def add_roi(self, roi, energy=0):
       """
-      PURPOSE:
-         This procedure adds a new region-of-interest to the MCA.
-      CALLING SEQUENCE:
-         mca.add_roi(roi)
-      INPUTS:
-         roi: An object of type mcaROI
-      KEYWORD INPUTS:
-         energy:  Set this flag to 1 to indicate that the .left and .right 
-                  fields of roi are in units of energy rather than channel 
-                  number.
-      EXAMPLE:
+      This procedure adds a new region-of-interest to the MCA.
+
+      Inputs:
+         roi: An object of type mcaROI.
+         
+      Kyetwords:
+         energy:
+            Set this flag to 1 to indicate that the .left and .right 
+            fields of roi are in units of energy rather than channel 
+            number.
+            
+      Example:
          mca = Mca('mca.001')
          roi = McaROI()
          roi.left = 500
@@ -383,20 +611,25 @@ class Mca:
    ########################################################################
    def find_roi(self, left, right, energy=0):
       """
-      PURPOSE:
-         This procedure finds the index number of the ROI with a specified
-         left and right channel number.
-      CALLING SEQUENCE:
-         index = mca.find_roi(left, right)
-      INPUTS:
-         left:  Left channel number (or energy) of this ROI
-         right: Right channel number (or energy) of this ROI
-      KEYWORD INPUTS:
-         energy: Set this flag to 1 to indicate that Left and Right are in units
-                 of energy rather than channel number.
-      FUNCTION RETURNS:
-         Index of the specified ROI, -1 if the ROI was not found.
-      EXAMPLE:
+      This procedure finds the index number of the ROI with a specified
+      left and right channel number.
+
+      Inputs:
+         left:
+            Left channel number (or energy) of this ROI
+            
+         right:
+            Right channel number (or energy) of this ROI
+         
+      Keywords:
+         energy:
+            Set this flag to 1 to indicate that Left and Right are in units
+            of energy rather than channel number.
+            
+      Output:
+         Returns the index of the specified ROI, -1 if the ROI was not found.
+         
+      Example:
          mca = Mca('mca.001')
          index = mca.find_roi(100, 200)
       """
@@ -414,13 +647,12 @@ class Mca:
    ########################################################################
    def delete_roi(self, index):
       """
-      PURPOSE:
-         This procedure deletes the specified region-of-interest from the MCA.
-      CALLING SEQUENCE:
-         mca.delete_roi(index)
-      INPUTS:
+      This procedure deletes the specified region-of-interest from the MCA.
+
+      Inputs:
          index:  The index of the ROI to be deleted, range 0 to len(mca.rois)
-      EXAMPLE:
+         
+      Example:
         mca = Mca('mca.001')
         mca.delete_roi(2)
       """
@@ -429,21 +661,22 @@ class Mca:
    ########################################################################
    def channel_to_energy(self, channels):
       """
-      PURPOSE:
-         This function converts channels to energy using the current
-         calibration values for the MCA.  This routine can convert a single
-         channel number or an array of channel numbers.  Users are strongly
-         encouraged to use this function rather than implement the conversion
-         calculation themselves, since it will be updated if additional
-         calibration parameters (cubic, etc.) are added.
-      CALLING SEQUENCE:
-         energy = mca.channel_to_energy(channels)
-      INPUTS:
-         channels:  The channel numbers to be converted to energy.  This can be
-                    a single number or a sequence of channel numbers.
-      OUTPUTS:
+      Converts channels to energy using the current calibration values for the
+      Mca.  This routine can convert a single channel number or an array of
+      channel numbers.  Users are strongly encouraged to use this function
+      rather than implement the conversion calculation themselves, since it
+      will be updated if additional calibration parameters (cubic, etc.) are
+      added.
+
+      Inputs:
+         channels:
+            The channel numbers to be converted to energy.  This can be
+            a single number or a sequence of channel numbers.
+            
+      Outputs:
          This function returns the equivalent energy for the input channels.
-      EXAMPLE:
+         
+      Example:
          mca = Mca('mca.001')
          channels = [100, 200, 300]
          energy = mca.channel_to_energy(channels) # Get the energy of these
@@ -457,27 +690,29 @@ class Mca:
    ########################################################################
    def channel_to_d(self, channels):
       """
-      PURPOSE:
-         This function converts channels to "d-spacing" using the current
-         calibration values for the MCA.  This routine can convert a single
-         channel number or an array of channel numbers.  Users are strongly
-         encouraged to use this function rather than implement the conversion
-         calculation themselves, since it will be updated if additional
-         calibration parameters are added.  This routine is useful for energy
-         dispersive diffraction experiments.  It uses both the energy calibration
-         parameters and the "two-theta" calibration parameter.
-      CALLING SEQUENCE:
-         d = mca.channel_to_d(channels)
-      INPUTS:
-         channels: The channel numbers to be converted to "d-spacing".
-                   This can be a single number or a list of channel numbers.
-      OUTPUTS:
+      Converts channels to "d-spacing" using the current calibration values for
+      the Mca.  This routine can convert a single channel number or an array of
+      channel numbers.  Users are strongly encouraged to use this function
+      rather than implement the conversion calculation themselves, since it
+      will be updated if additional calibration parameters are added.  This
+      routine is useful for energy dispersive diffraction experiments.  It uses
+      both the energy calibration parameters and the "two-theta" calibration
+      parameter.
+
+      Inputs:
+         channels:
+            The channel numbers to be converted to "d-spacing".
+            This can be a single number or a list of channel numbers.
+            
+      Outputs:
          This function returns the equivalent "d-spacing" for the input channels.
          The output units are in Angstroms.
-      RESTRICTIONS:
+         
+      Restrictions:
          This function assumes that the units of the energy calibration are keV
          and that the units of "two-theta" are degrees.
-      EXAMPLE:
+         
+      Example:
          mca = Mca('mca.001')
          channels = [100,200,300]
          d = mca.channel_to_d(channels)       # Get the "d-spacing" of these
@@ -488,27 +723,29 @@ class Mca:
    ########################################################################
    def energy_to_channel(self, energy, clip=0):
       """
-      PURPOSE:
-         This function converts energy to channels using the current
-         calibration values for the MCA.  This routine can convert a single
-         energy or an array of energy values.  Users are strongly
-         encouraged to use this function rather than implement the conversion
-         calculation themselves, since it will be updated if additional
-         calibration parameters are added.
-      CALLING SEQUENCE:
-         channel = mca.energy_to_channel(energy)
-      INPUTS:
-         energy: The energy values to be converted to channels. This can be a
-                 single number or a sequence energy values.
-      KEYWORD INPUTS:
-         clip: Set this flag to 1 to clip the returned values to be between
-               0 and nchans-1.  The default is not to clip.
-      OUTPUTS:
+      Converts energy to channels using the current calibration values for the
+      Mca.  This routine can convert a single energy or an array of energy
+      values.  Users are strongly encouraged to use this function rather than
+      implement the conversion calculation themselves, since it will be updated
+      if additional calibration parameters are added.
+
+      Inputs:
+         energy:
+            The energy values to be converted to channels. This can be a
+            single number or a sequence energy values.
+            
+      Keywords:
+         clip:
+            Set this flag to 1 to clip the returned values to be between
+            0 and nchans-1.  The default is not to clip.
+            
+      Outputs:
          This function returns the closest equivalent channel for the input
          energy.  Note that it does not generate an error if the channel number
          is outside the range 0 to (nchans-1), which will happen if the energy
-         is outside the range for the calibration values of the MCA.
-      EXAMPLE:
+         is outside the range for the calibration values of the Mca.
+         
+      Example:
          mca = Mca('mca.001')
          channel = mca.energy_to_channel(5.985)
       """
@@ -516,16 +753,12 @@ class Mca:
          channel = ((energy-self.calibration.offset) /
                     self.calibration.slope)
       else:
-         npts = n_elements(energy)
-         channel = energy
-         for i in range(npts):
-            t = fz_roots([self.calibration.offset-energy[i],
-                          self.calibration.slope,
-                          self.calibration.quad])
-            # There are 2 roots.  Which one is correct depends on the sign of
-            # the quadratic term
-            if (self.calibration.quad < 0): channel[i]=t[0] 
-            else: channel[i]=t[1]
+         # Use the quadratic formula, use some shorthand
+         a = self.calibration.quad
+         b = self.calibration.slope
+         c = self.calibration.offset - energy
+         # There are 2 roots.  I think we always want the "+" root?
+         channel = (-b + Numeric.sqrt(b**2 - 4.*a*c))/(2.*a)
       channel = Numeric.around(channel)
       if (clip != 0): 
          nchans = len(self.data)
@@ -538,29 +771,32 @@ class Mca:
    ########################################################################
    def d_to_channel(self, d, clip=0):
       """
-      PURPOSE:
-         This function converts "d-spacing" to channels using the current
-         calibration values for the MCA.  This routine can convert a single
-         "d-spacing" or an array of "d-spacings".  Users are strongly
-         encouraged to use this function rather than implement the conversion
-         calculation themselves, since it will be updated if additional
-         calibration parameters are added.    This routine is useful for energy
-         dispersive diffraction experiments.  It uses both the energy 
-         calibration parameters and the "two-theta" calibration parameter.
-      CALLING SEQUENCE:
-         channel = mca.d_to_channel(d)
-      INPUTS:
-         d: The "d-spacing" values to be converted to channels.
+      Converts "d-spacing" to channels using the current calibration values
+      for the Mca.  This routine can convert a single "d-spacing" or an array
+      of "d-spacings".  Users are strongly encouraged to use this function
+      rather than implement the conversion calculation themselves, since it
+      will be updated if additional calibration parameters are added.
+      This routine is useful for energy dispersive diffraction experiments.
+      It uses both the energy calibration parameters and the "two-theta"
+      calibration parameter.
+
+      Inputs:
+         d:
+            The "d-spacing" values to be converted to channels.
             This can be a single number or an array of values.
-      KEYWORD INPUTS:
-         clip: Set this flag to 1 to clip the returned values to be between
-               0 and nchans-1.  The default is not to clip.
-      OUTPUTS:
+            
+      Keywords:
+         clip:
+            Set this flag to 1 to clip the returned values to be between
+            0 and nchans-1.  The default is not to clip.
+            
+      Outputs:
          This function returns the closest equivalent channel for the input
          "d-spacing". Note that it does not generate an error if the channel
          number is outside the range 0 to (nchans-1), which will happen if the
-         "d-spacing" is outside the range for the calibration values of the MCA.
-      EXAMPLE:
+         "d-spacing" is outside the range for the calibration values of the Mca.
+         
+      Example:
          mca = Mca('mca.001')
          channel = mca.d_to_chan(1.598)
       """
@@ -570,24 +806,25 @@ class Mca:
    ########################################################################
    def write_file(self, file, netcdf=0):
       """
-      PURPOSE:
-         This procedure writes MCA or MED objects to a disk file.
-         It calls Mca.write_netcdf_file if the netcdf keyword flg is set,
+      Writes Mca or Med objects to a disk file.
+      
+      It calls Mca.write_netcdf_file if the netcdf keyword flg is set,
 
+      Note that users who want to read such files with Python are strongly
+      encouraged to use Mca.read_file()
 
-         Note that users who want to read such files with Python are strongly
-         encouraged to use mca.read_file()
-      CALLING SEQUENCE:
-         mca.write_file(file)
-      INPUTS:
-         file:  The name of the disk file to write.
-      KEYWORD INPUTS:
-         netcdf: Set this flag to write the file in netCDF format, otherwise
-                 the file is written in ASCII format.  See the documentation
-                 for Mca.write_ascii_file and MCA::WRITE_NETCDF_FILE for 
-                 information on the formats.
+      Inputs:
+         file:
+            The name of the disk file to write.
+            
+      Keywords:
+         netcdf:
+            Set this flag to write the file in netCDF format, otherwise
+            the file is written in ASCII format.  See the documentation
+            for Mca.write_ascii_file and Mca.write_netcdf_file for 
+            information on the formats.
  
-      EXAMPLE:
+      Example:
          mca = Mca()
          mca.write_file('mca.001')
       """
@@ -610,16 +847,26 @@ class Mca:
    ########################################################################
    def read_file(self, file, netcdf=0, detector=0):
       """
-      PURPOSE:
-         This procedure reads a disk file into an MCA object.  If the netcdf=1
-         flag is set it reads a netcdf file, else it assumes the file is ASCII.
-         If the data file has multiple detectors then the detector keyword can be
-         used to specify which detector data to return.
-      CALLING SEQUENCE:
-         mca.read_file(file)
-      INPUTS:
-         file:  The name of the disk file to read.
-      EXAMPLE:
+      Reads a disk file into an MCA object.  If the netcdf=1 flag is set it
+      reads a netcdf file, else it assumes the file is ASCII.
+      If the data file has multiple detectors then the detector keyword can be
+      used to specify which detector data to return.
+
+      Inputs:
+         file:
+            The name of the disk file to read.
+            
+      Keywords:
+         netcdf:
+            Set this flag to read files written in netCDF format, otherwise
+            the routine assumes that the file is in ASCII format.
+            See the documentation for Mca.write_ascii_file and
+            Mca.write_netcdf_file for information on the formats.
+
+         detector:
+            Specifies which detector to read if the file has multiple detectors.
+            
+      Example:
          mca = Mca()
          mca.read_file('mca.001')
       """
@@ -639,55 +886,55 @@ class Mca:
    def fit_background(self, bottom_width=4., top_width=0., exponent=2, 
                       tangent=0, compress=4):
       """
-      PURPOSE:
-         This function fits a background to an MCA spectrum.
-         The background is fitted using an enhanced version of the algorithm
-         published by Kajfosz, J. and Kwiatek, W .M. (1987)  "Non-polynomial
-         approximation of background in x-ray spectra." Nucl. Instrum. Methods
-         B22, 78-81.
-      KEYWORD PARAMETERS:
-         TOP_WIDTH:
-             Specifies the width of the polynomials which are concave upward.
-             The top_width is the full width in energy units at which the
-             magnitude of the polynomial is 100 counts. The default is 0, which
-             means that concave upward polynomials are not used.
+      This function fits a background to an MCA spectrum. The background is
+      fitted using an enhanced version of the algorithm published by
+      Kajfosz, J. and Kwiatek, W .M. (1987)  "Non-polynomial approximation of
+      background in x-ray spectra." Nucl. Instrum. Methods B22, 78-81.
+      
+      Keywords:
+         top_width:
+            Specifies the width of the polynomials which are concave upward.
+            The top_width is the full width in energy units at which the
+            magnitude of the polynomial is 100 counts. The default is 0, which
+            means that concave upward polynomials are not used.
 
-         BOTTOM_WIDTH:
-             Specifies the width of the polynomials which are concave downward.
-             The bottom_width is the full width in energy units at which the
-             magnitude of the polynomial is 100 counts. The default is 4.
+         bottom_width:
+            Specifies the width of the polynomials which are concave downward.
+            The bottom_width is the full width in energy units at which the
+            magnitude of the polynomial is 100 counts. The default is 4.
 
-         EXPONENT:
-             Specifies the power of polynomial which is used. The power must be
-             an integer. The default is 2, i.e. parabolas. Higher exponents,
-             for example EXPONENT=4, results in polynomials with flatter tops
-             and steeper sides, which can better fit spectra with steeply
-             sloping backgrounds.
+         exponent:
+            Specifies the power of polynomial which is used. The power must be
+            an integer. The default is 2, i.e. parabolas. Higher exponents,
+            for example EXPONENT=4, results in polynomials with flatter tops
+            and steeper sides, which can better fit spectra with steeply
+            sloping backgrounds.
 
-         TANGENT
-             Specifies that the polynomials are to be tangent to the slope of the
-             spectrum. The default is vertical polynomials. This option works
-             best on steeply sloping spectra. It has trouble in spectra with
-             big peaks because the polynomials are very tilted up inside the
-             peaks.
+         tangent:
+            Specifies that the polynomials are to be tangent to the slope of the
+            spectrum. The default is vertical polynomials. This option works
+            best on steeply sloping spectra. It has trouble in spectra with
+            big peaks because the polynomials are very tilted up inside the
+            peaks.
 
-         COMPRESS:
-             Compression factor to apply before fitting the background.
-             Default=4, which means, for example, that a 2048 channel spectrum
-             will be rebinned to 512 channels before fitting.
-             The compression is done on a temporary copy of the input spectrum,
-             so the input spectrum itself is unchanged.
-             The algorithm works best if the spectrum is compressed before it
-             is fitted. There are two reasons for this. First, the background
-             is constrained to never be larger than the data itself. If the
-             spectrum has negative noise spikes they will cause the fit to be
-             too low. Compression will smooth out such noise spikes.
-             Second, the algorithm requires about 3*N^2 operations, so the time
-             required grows rapidly with the size of the input spectrum. On a
-             200 MHz Pentium it takes about 3 seconds to fit a 2048 channel
-             spectrum with COMPRESS=1 (no compression), but only 0.2 seconds
-             with COMPRESS=4 (the default).
-      PROCEDURE:
+         compress:
+            Compression factor to apply before fitting the background.
+            Default=4, which means, for example, that a 2048 channel spectrum
+            will be rebinned to 512 channels before fitting.
+            The compression is done on a temporary copy of the input spectrum,
+            so the input spectrum itself is unchanged.
+            The algorithm works best if the spectrum is compressed before it
+            is fitted. There are two reasons for this. First, the background
+            is constrained to never be larger than the data itself. If the
+            spectrum has negative noise spikes they will cause the fit to be
+            too low. Compression will smooth out such noise spikes.
+            Second, the algorithm requires about 3*N^2 operations, so the time
+            required grows rapidly with the size of the input spectrum. On a
+            200 MHz Pentium it takes about 3 seconds to fit a 2048 channel
+            spectrum with COMPRESS=1 (no compression), but only 0.2 seconds
+            with COMPRESS=4 (the default).
+            
+     Procedure:
          1) At each channel "i" an n'th degree polynomial which is concave up
          is fitted. Its equation is
 
@@ -743,11 +990,11 @@ class Mca:
          polynomials which are tangent rather than vertical the background fit
          is much improved on spectra with steep slopes.
 
-      OUTPUTS:
+      Outputs:
          This function returns an MCA object which is identical to the calling
          object, except that the data have been replaced by the background fit.
 
-      EXAMPLE:
+      Example:
         mca = Mca()
         mca.read_file('mca.001')
         bgd = mca.fit_background(mca, bottom=6, exponent=4)
@@ -858,165 +1105,138 @@ class Mca:
    def fit_peaks(self, peaks, fit=None, background=None,
                  output='', spreadsheet=None, 
                  append=1, **background_kw):
-   #+
-   # NAME:
-   #       MCA::FIT_PEAKS
-   #
-   # PURPOSE:
-   #       This function fits the peaks in the MCA spectrum. It provides a
-   #       convenient interface to the <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A> function.
-   #
-   # CATEGORY:
-   #       MCA object library.
-   #
-   # CALLING SEQUENCE:
-   #       Result = mca->FIT_PEAKS(Peaks)
-   #
-   # INPUTS:
-   #       Peaks:  An array of structures of type {MCA_PEAKS}.  See <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A> and <A HREF="mca_utility_routines.html#READ_PEAKS">READ_PEAKS</A>
-   #               for more information.
-   #
-   # KEYWORD PARAMETERS:
-   #       FIT:
-   #           A structure of type {MCA_FIT} which can be used to control the
-   #           peak fitting.  If this keyword is omitted then the Fit structure
-   #           is created with mca->FIT_INITIALIZE()
-   #       BACKGROUND:
-   #           An MCA object containing the fitted background.  If this keyword
-   #           is omitted then this function will call mca->FIT_BACKGROUND before
-   #           calling FIT_PEAKS.
-   #       OUTPUT:
-   #           The name of an output file to receive the ASCII printout of the
-   #           fit results.  This keyword is simply passed to <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>.
-   #       SPREADSHEET:
-   #           The name of an output file to receive the ASCII output of the
-   #           fit results in spreadsheet format.  This keyword is simply passed to <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>.
-   #       APPEND:
-   #           Flag indicating whether the output and spreadsheet files should be
-   #           appended to or overwritten.  This keyword is simply passed to <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>.
-   #
-   #       In addition to these keywords, all keywords accepted by the <A HREF="mca_utility_routines.html#FIT_BACKGROUND">FIT_BACKGROUND</A>
-   #       function are accepted if the Background keyword is not present, i.e.
-   #       if this function will be calling FIT_BACKGROUND().
-   #
-   # OUTPUTS:
-   #       This function returns an MCA object which is identical to the calling
-   #       object, except that the data have been replaced by the peak fit.
-   #
-   # PROCEDURE:
-   #       The function does the following:
-   #           - Creates the Fit structure with mca->FIT_INITIALIZE() if Fit
-   #             was not passed as a keyword parameter.
-   #           - Fits the background using MCA::FIT_BACKGROUND if Background
-   #             was not passed as a keyword parameter.
-   #           - Extracts the data from the input spectrum and the background
-   #             spectrum.
-   #           - Calls the <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A>
-   #             function with the background subtracted data.
-   #           - Calls <A HREF="#MCA::FIT_PEAKS_REPORT">MCA::FIT_PEAKS_REPORT</A>
-   #           - Creates a new MCA object using MCA::COPY() and stores the output
-   #             of FIT_PEAKS() in this new object with MCA::SET_DATA.  It then
-   #             returns this new MCA object as the function return value.
-   #
-   # EXAMPLE:
-   #       mca = obj_new('MCA')
-   #       mca->read_file, 'mca.001'
-   #       peaks = read_peaks('mypeaks.pks')
-   #       fit = mca->FIT_PEAKS(peaks, bottom=6, exponent=4)
-   #       mca->plot
-   #       fit->oplot
-   #
-   # MODIFICATION HISTORY:
-   #       Written by:     Mark Rivers, October 23, 1998
-   #       Nov. 1, 1998.  Mark Rivers. Added APPEND keyword
-   #       Jan. 4, 2001.  Mark Rivers. Added SPREADHSHEET keyword.
-   #-
+      """
+      Fits the peaks in the MCA spectrum. It provides a convenient interface to
+      the fitPeaks() function.
+   
+      Inputs:
+         peaks:  A list of McaPeak objects.  See fitPeaks() and read_peaks() for
+         more information.
 
-   #   If fit is not a structure of type {MCA_FIT} then initialize it
-       if (not isinstance(fit, McaFit)):
-          fit = McaFit(self)
+      Keywords:
+         fit:
+            An object of type McaFit which can be used to control the
+            peak fitting.  If this keyword is omitted then the fit structure
+            is created with McaFit()
+            
+         background:
+            An Mca object containing the fitted background.  If this keyword
+            is omitted then this function will call Mca.fit_background() before
+            calling fitPeaks().
+            
+         output:
+            The name of an output file to receive the ASCII printout of the
+            fit results.  This keyword is simply passed to fit_peaks_report().
+            
+         spreadsheet:
+            The name of an output file to receive the ASCII output of the
+            fit results in spreadsheet format.  This keyword is simply passed to
+            fit_peaks_report().
+            
+         append:
+            Flag indicating whether the output and spreadsheet files should be
+            appended to or overwritten.  This keyword is simply passed to
+            fit_peaks_report9).
 
+         In addition to these keywords, all keywords accepted by the
+         fit_background() function are accepted if the background keyword is
+         not present, i.e. if this function will be calling fit_background().
 
-   #   If background is not an object of type MCA then initialize it
-       if (not isinstance(background, Mca)):
-           background = self.fit_background(**background_kw)
+      Outputs:
+         This function returns an Mca object which is identical to the calling
+         object, except that the data have been replaced by the peak fit.
 
-       fit.npeaks = len(peaks)
-       background_counts = background.get_data()
-       observed_counts = self.get_data()
-       t0 = time.time()
-       [fit, peaks, fit_counts] = fit_peaks.fit_peaks(fit, peaks,
-                                       observed_counts - background_counts)
-       t1 = time.time()
-       fit_counts = fit_counts + background_counts
-       self.fit_peaks_report(fit, peaks, background, output=output, 
-                        spreadsheet=spreadsheet, append=append, time=t1-t0)
-       fit_mca = copy.copy(self)
-       fit_mca.set_data(fit_counts)
-       return([fit, peaks, fit_mca])
+      Procedure:
+         The function does the following:
+            - Creates the Fit structure with mca->FIT_INITIALIZE() if Fit
+              was not passed as a keyword parameter.
+            - Fits the background using fit_background() if background
+              was not passed as a keyword parameter.
+            - Extracts the data from the input spectrum and the background
+              spectrum.
+            - Calls fitPeaks() with the background subtracted data.
+            - Calls fit_peaks_report()
+            - Creates a new Mca object using Mca.deepcopy and stores the output
+              of fitPeaks() in this new object with set_data().  It then
+              returns this new MCA object as the function return value.
+
+       Example:
+             mca = Mca()
+             mca.read_file('mca.001')
+             peaks = read_peaks('mypeaks.pks')
+             fit = mca.fit_peaks(peaks, bottom=6, exponent=4)
+      """
+      # If fit is not an object of type McaFit then initialize it
+      if (not isinstance(fit, McaFit)):
+         fit = McaFit(self)
+
+      # Copy the calibration parameters to fit
+      fit.get_calibration(self)
+
+      # If background is not an object of type Mca then initialize it
+      if (not isinstance(background, Mca)):
+          background = self.fit_background(**background_kw)
+
+      fit.npeaks = len(peaks)
+      background_counts = background.get_data()
+      observed_counts = self.get_data()
+      t0 = time.time()
+      [fit, peaks, fit_counts] = fitPeaks.fitPeaks(fit, peaks,
+                                      observed_counts - background_counts)
+      t1 = time.time()
+      fit_counts = fit_counts + background_counts
+      self.fit_peaks_report(fit, peaks, background, output=output, 
+                       spreadsheet=spreadsheet, append=append, time=t1-t0)
+      fit_mca = copy.copy(self)
+      fit_mca.set_data(fit_counts)
+      return([fit, peaks, fit_mca])
 
 
    ########################################################################
    def fit_peaks_report(self, fit, peaks, background, output='',
                         spreadsheet=None, append=1, time=None):
-   #+
-   # NAME:
-   #       MCA::FIT_PEAKS_REPORT
-   #
-   # PURPOSE:
-   #       This procedure prints out the results from <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A>
-   #
-   # CATEGORY:
-   #       MCA object library.
-   #
-   # CALLING SEQUENCE:
-   #       mca->FIT_PEAKS_REPORT, Fit, Peaks, Background
-   #
-   # INPUTS:
-   #       Fit:  A structure of type {MCA_FIT}.
-   #
-   #       Peaks:  An array of structures of type {MCA_PEAK}.
-   #
-   #       (See <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A> for more information on Fit and Peaks)
-   #
-   #       Background:  An MCA object containing the fitted background spectrum.
-   #
-   # KEYWORD PARAMETERS:
-   #       OUTPUT:
-   #           The name of an output file to receive the ASCII printout of the
-   #           fit results.  If this keyword is omitted then the output will be
-   #           written to stdout, i.e. the IDL output window.  If the Output file
-   #           already exists then the new information will (by default) be appended
-   #           to the file.
-   #
-   #       SPREADSHEET:
-   #           The name of an output file to receive the ASCII output of the
-   #           fit results in a format easily imported into a spreadsheet.  If this
-   #           keyword is omitted then no spreadsheet output will be generated.
-   #           written to stdout, i.e. the IDL output window.
-   #           If the spreadhseet file already exists then the new information will
-   #           (by default) be appended to the file.
-   #
-   #       APPEND:
-   #           Set this keyword to 0 to overwrite the output and spreadsheet files
-   #           rather than to append to them, which is the default behavior.
-   #
-   # EXAMPLE:
-   #       mca = obj_new('MCA')
-   #       mca->read_file, 'mca.001'
-   #       peaks = read_peaks('mypeaks.pks')
-   #       fit = mca->fit_peaks(peaks, fit=fit, background=background, $
-   #                            bottom=6, exponent=4)
-   #       mca->FIT_PEAKS_REPORT, fit, peaks, background, output='mca.001_out'
-   #
-   # MODIFICATION HISTORY:
-   #       Written by:     Mark Rivers, October 23, 1998
-   #       Nov. 1, 1998.  Mark Rivers. Added APPEND keyword
-   #       Nov. 17, 1998  Mark Rivers. Added error string, initial energy.
-   #       Jan. 4, 2001   Mark Rivers. Added spreadsheet file output.
-   #       Jan. 9, 2001   Mark Rivers. Modified spreadsheet output slightly
-   #       Jan. 18, 2001  Mark Rivers. Added energy and FWHM to spreadsheet output
-   #-
+      """
+      Prints out the results from <A HREF="mca_utility_routines.html#FIT_PEAKS">FIT_PEAKS</A>
+
+      Inputs:
+         fit:
+            An McaFit object with the global fitting parameters.
+
+         peaks:
+            A list of McaPeak objects with the fit results for each peak.
+
+         See fit_peaks for more information on fit and peaks.
+
+      background:
+         An Mca object containing the fitted background spectrum.
+
+      Keywords:
+         output:
+            The name of an output file to receive the ASCII printout of the
+            fit results.  If this keyword is omitted then the output will be
+            written to stdout, i.e. the IDL output window.  If the Output file
+            already exists then the new information will (by default) be appended
+            to the file.
+
+         spreadsheet:
+            The name of an output file to receive the ASCII output of the
+            fit results in a format easily imported into a spreadsheet.  If this
+            keyword is omitted then no spreadsheet output will be generated.
+            written to stdout, i.e. the IDL output window.
+            If the spreadhseet file already exists then the new information will
+            (by default) be appended to the file.
+
+         append:
+            Set this keyword to 0 to overwrite the output and spreadsheet files
+            rather than to append to them, which is the default behavior.
+
+      Example:
+         mca = Mca(file='mca.001')
+         peaks = read_peaks('mypeaks.pks')
+         [fit, peaks, predicted] = mca.fit_peaks(peaks, fit,
+                                                 bottom=6, exponent=4)
+         mca.fit_peaks_report(fit, peaks, background, output='mca.001_out')
+      """
 
       if (append): mode = 'a'
       else: mode = 'w'
@@ -1125,31 +1345,46 @@ class Mca:
 def write_ascii_file(file, data, calibration, elapsed, presets, rois,
                      environment):
    """
-   PURPOSE:
-      This procedure writes MCA or MED objects to a disk file.  The file 
-      format is a tagged ASCII format.  The file contains the information 
-      from the Mca object which it makes sense to store permanently, but 
-      does not contain all of the internal state information for the MCA.  
-      Files written with this routine can be read with Mca.read_file().
+   Writes Mca or Med data to a disk file.  The file 
+   format is a tagged ASCII format.  The file contains the information 
+   from the Mca object which it makes sense to store permanently, but 
+   does not contain all of the internal state information for the Mca.  
+   Files written with this routine can be read with read_ascii_file(), which
+   is called by Mca.read_file() if the netcdf flag is 0.
 
-      Note that users who want to read such files with Python are strongly
-      encouraged to use Mca.read_file.  For reading files in other languages
-      users should use the tags to interpret the data and NOT rely on the
-      position of lines in the data.  Additional tags may be added in the
-      future, but existing tags will not be changed.
+   This procedure is typically not called directly, but is called
+   by Mca.write_file if the netcdf=1 keyword is not used.
 
-      This procedure is typically not called directly, but is called
-      by Mca.write_file if the netcdf=1 keyword is not used.
-   CALLING SEQUENCE:
-      write_ascii_file(file, data, calibration, elapsed, presets, rois)
-   INPUTS:
-      file:  The name of the disk file to write.
+   This function can be used for writing for Mca objects, in which case
+   each input parameter is an object, such as McaElapsed, etc.
+   It can also be used for writing Med objects, in which case each input
+   parameter is a list.
+   
+   If the rank of data is 2 then this is an Med, and the number of detectors
+   is the first dimension of data
+
+   Inputs:
+      file:
+         The name of the disk file to write.
+         
+      data:
+         The data to write.  Either 1-D array or list of 1-D arrays.
+
+      calibration:
+         An object of type McaCalibration, or a list of such objects.
+
+      elapsed:
+         An object of type McaElapsed, or a list of such objects.
+
+      presets:
+         An object of type McaPresets, or a list of such objects.
+
+      rois:
+         A list of McaROI objects, or a list of lists of such objects.
+      
+      environment:
+         A list of McaEnvironment objects, or a list of lists of such objects.
    """
-   # This method can either be called for Mca objects, in which case
-   # each attribute is of type McaElapsed, etc., or it can be called for
-   # Med objects, in which case each attibute is a list.
-   # If the rank of data is 2 then this is an Med, and the number of detectors
-   # is the first dimension of data
    if (Numeric.rank(data) == 2):
       n_det = len(data)
    else:
@@ -1199,16 +1434,21 @@ def write_ascii_file(file, data, calibration, elapsed, presets, rois,
       num = str(i)
       left=[]; right=[]; label=[]
       for d in range(n_det):
-         left.append(rois[d][i].left)
-         right.append(rois[d][i].right)
-         label.append(rois[d][i].label)
+         if (i < nrois[d]):
+            left.append(rois[d][i].left)
+            right.append(rois[d][i].right)
+            label.append(rois[d][i].label + '&')
+         else:
+            left.append(0)
+            right.append(0)
+            label.append(' &')
       fp.write('ROI_'+num+'_LEFT:  '+(iformat % tuple(left))+'\n')
       fp.write('ROI_'+num+'_RIGHT:  '+(iformat % tuple(right))+'\n')
       fp.write('ROI_'+num+'_LABEL:  '+(sformat % tuple(label))+'\n')
    for e in environment:
-     fp.write('ENVIRONMENT: '       + e.name +
-                              '="'  + e.value +
-                              '" (' + e.description + ')\n')
+     fp.write('ENVIRONMENT: '       + str(e.name) +
+                              '="'  + str(e.value) +
+                              '" (' + str(e.description) + ')\n')
    fp.write('DATA: \n')
    counts = Numeric.zeros(n_det)
    for i in range(nchans):
@@ -1220,17 +1460,17 @@ def write_ascii_file(file, data, calibration, elapsed, presets, rois,
 ########################################################################
 def read_ascii_file(file):
    """
-   PURPOSE:
-      This procedure reads a disk file.  The file format
-      is a tagged ASCII format.  The file contains the information from the
-      MCA object which it makes sense to store permanently, but does not
-      contain all of the internal state information for the MCA.  This
-      procedure reads files written with Mca.write_file
-   CALLING SEQUENCE:
-      read_ascii_file(file)
-   INPUTS:
-      file:  The name of the disk file to read.
-   OUTPUTS:
+   Reads a disk file.  The file format is a tagged ASCII format.
+   The file contains the information from the Mca object which it makes sense
+   to store permanently, but does not contain all of the internal state
+   information for the Mca.  This procedure reads files written with
+   write_ascii_file().
+
+   Inputs:
+      file:
+         The name of the disk file to read.
+         
+   Outputs:
       Returns a dictionary of the following type:
       'n_detectors': int,
       'calibration': [McaCalibration()],
@@ -1238,7 +1478,8 @@ def read_ascii_file(file):
       'rois':        [[McaROI()]]
       'data':        [Numeric.array]
       'environment': [[McaEnvironment()]]
-   EXAMPLE:
+      
+   Example:
       m = read_ascii_file('mca.001')
       m['elapsed'][0].real_time
    """
@@ -1278,7 +1519,7 @@ def read_ascii_file(file):
             nrois.append(int(values[d]))
          max_rois = max(nrois)
          for d in range(n_detectors):
-            for r in range(max_rois):
+            for r in range(nrois[d]):
                rois[d].append(McaROI())
       elif (tag == 'REAL_TIME:'):
          for d in range(n_detectors):
@@ -1305,7 +1546,7 @@ def read_ascii_file(file):
          env.name = value[0:p1]
          p2 = string.find(value[p1+2:], '"')
          env.value = value[p1+2: p1+2+p2]
-         env.desc = value[p1+2+p2+3:-1]
+         env.description = value[p1+2+p2+3:-1]
          environment.append(env)
       elif (tag == 'DATA:'):
          data = []
@@ -1321,16 +1562,19 @@ def read_ascii_file(file):
              roi = 'ROI_'+str(i)+'_'
              if (tag == roi+'LEFT:'):
                 for d in range(n_detectors):
-                    rois[d][i].left = int(values[d])
+                   if (i < nrois[d]):
+                       rois[d][i].left = int(values[d])
                 break
              elif (tag == roi+'RIGHT:'):
                 for d in range(n_detectors):
-                    rois[d][i].right = int(values[d])
+                   if (i < nrois[d]):
+                      rois[d][i].right = int(values[d])
                 break
              elif (tag == roi+'LABEL:'):
                 labels = string.split(value, '&')
                 for d in range(n_detectors):
-                    rois[d][i].label = string.strip(labels[d])
+                   if (i < nrois[d]):
+                      rois[d][i].label = string.strip(labels[d])
                 break
          else:
             print 'Unknown tag = '+tag+' in file: ' + file + '.'
@@ -1356,14 +1600,16 @@ def read_peaks(file):
    The routine also returns a structure of type McaBackground.  This structure
    may or may not actually be defined in the file (older peaks files lacked it),
    but a reasonable default value will always be returned.
-   result = read_peaks(file)
-   INPUTS:
+
+   Inputs:
       file:  
          The name of a disk file containing the peak definitions.
-   OUTPUTS:
+         
+   Outputs:
         This function returns a dictionary:
         'peaks': [McaPeak]          # A list of McaPeak objects
         'background': McaBackground # An McaBackground object
+        
    The format of the disk file is as follows:
       - Lines containing the parameters for the background (fields in
         McaBackground class) have the following format:
@@ -1433,6 +1679,7 @@ def read_peaks(file):
 
 ########################################################################
 def parse_peak(text):
+   """ Private function """
    peak = McaPeak()
    params = text.split(',')
    n_params = len(params)
@@ -1477,16 +1724,18 @@ def write_peaks(file, peaks, background=None):
    Writes a list of obejcts of type McaPeak to a disk file.
    If the background parameter is present it also writes the background
    structure to the file.
-   write_peak(file, peaks, background)
-   INPUTS:
+   
+   Inputs:
       file:
          The name of a disk file to be written ;
       peaks:
          A list of McaPeak objects
-   KEYWORD INPUTS:
+         
+   Keywords:
       background:
          An object of type McaBackground
-   EXAMPLE:
+         
+   Example:
       r = read_peaks('my_peaks.pks')
       peaks = r['peaks']
       peaks[1].initial_energy = 6.4
