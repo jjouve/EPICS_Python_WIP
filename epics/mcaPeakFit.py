@@ -40,6 +40,9 @@ class mcaPeakFit:
          self.fit = Mca.McaFit(mca)
       else:
          self.fit = fit
+      # Copy the calibration from the Mca to the fit object
+      self.fit.get_calibration(self.fit_mca)
+      
       if (len(self.fit.peaks) == 0): self.fit.peaks=[Mca.McaPeak()]
       xsize=10
       top = myTkTop.myTkTop()
