@@ -1,8 +1,7 @@
 import os
 import string
 import time
-if (os.name != 'nt'):  # ca nor working yet
-   from epicsPV import *
+from epicsPV import *
 from Mca import *
 import Xrf
 
@@ -112,7 +111,7 @@ class epicsMca(Mca):
          self.env_pvs.append(epicsPV(env.name, wait=0))
 
       # Wait for all PVs to connect
-      self.pvs['calibration']['calo'].pend_io()
+      self.pvs['calibration']['calo'].pend_io(30.)
 
       # ClientWait does not exist in simple_mca.db, which is used
       # for multi-element detectors.  We see if it exists by trying to connect
@@ -127,11 +126,11 @@ class epicsMca(Mca):
          self.pvs['acquire']['client_wait'] = None
          self.pvs['acquire']['enable_wait'] = None
 
-      # Put monitors on the VAL, NUSE and ACQG fields
-      # Bug - this does not work yet, data read back are corrupt
-      # self.pvs['data']['nuse'].setMonitor()
-      # self.pvs['data']['val'].setMonitor()
-      # self.pvs['acquire']['acqg'].setMonitor()
+      # Put monitors on the ERTM, VAL, NUSE and ACQG fields
+      self.pvs['data']['nuse'].setMonitor()
+      self.pvs['data']['val'].setMonitor()
+      self.pvs['acquire']['acqg'].setMonitor()
+      self.pvs['elapsed']['ertm'].setMonitor()
 
       # Read all of the information from the record
       self.get_calibration()
@@ -221,8 +220,7 @@ class epicsMca(Mca):
 
    #######################################################################
    def new_elapsed(self):
-      # return self.pvs['elapsed']['ertm'].checkMonitor()
-      return 1  # Force for now
+      return self.pvs['elapsed']['ertm'].checkMonitor()
 
    #######################################################################
    def get_elapsed(self):
@@ -339,14 +337,14 @@ class epicsMca(Mca):
 
    #######################################################################
    def new_data(self):
-      # return self.pvs['data']['val'].checkMonitor()
-      return 1  # Force for now
+      return self.pvs['data']['val'].checkMonitor()
 
    #######################################################################
    def get_data(self):
       nuse = self.pvs['data']['nuse'].getw()
       nchans = max(nuse,1)
       data = self.pvs['data']['val'].getw(count=nchans)
+      data = Numeric.asarray(data)
       Mca.set_data(self, data)
       return Mca.get_data(self)
 
@@ -360,13 +358,12 @@ class epicsMca(Mca):
 
    #######################################################################
    def new_acquire_status(self):
-      # return self.pvs['acquire']['acqg'].checkMonitor()
-      return 1  # Force for now
+      return self.pvs['acquire']['acqg'].checkMonitor()
 
    #######################################################################
    def get_acquire_status(self, update=0):
       """
-      busy, new = m.get_acquire_staus([update=1])
+      busy = m.get_acquire_staus([update=1])
       KEYWORD PARAMETERS:
          UPDATE:
             Set this keyword to force the routine to process the record.
