@@ -3,7 +3,9 @@ Fits a spectrum to a set of Gaussian peaks.  This class is independent of the
 Mca class library, except that the "fit" and "peak" objects used must have
 the fields defined as they are for the McaFit and McaPeak classes.
 
-Author:     Mark Rivers
+Author:
+   Mark Rivers
+   
 Modification history:
    Mark Rivers, October 21, 1998.
       This is the latest re-write of a routine which has a long history, begun
@@ -23,6 +25,11 @@ Modification history:
 
    Mark Rivers, Sept 18, 2002.
       Converted from IDL to Python.
+
+   Sept 25., 2002 MLR
+      - Previously several fields in the peaks could be clobbered if a
+        peak was outside the energy range of the spectrum.  Added new .ignore
+        field to McaPeak to work around this problem and use that field here.
 """
 import Numeric
 import mpfit
@@ -65,7 +72,7 @@ def copy_fit_params(parameters, fit, peaks):
        elif (peak.ampl_factor > 0.):
            peak.ampl = (last_opt_peak.ampl * peak.ampl_factor * 
                         last_opt_peak.fwhm / max(peak.fwhm, .001))
-       elif (peak.ampl_factor == -1.):
+       if (peak.ignore == 1):
            peak.ampl = 0.
    return([fit, peaks])
 
@@ -177,7 +184,6 @@ def fitPeaks(fit, peaks, observed):
                                  # >0.0 = Fix amplitude to this value 
                                  #        relative to amplitude of 
                                  #        previous unconstrained peak
-                                 # -1.0 = Fix amplitude at 0.0
              .initial_energy # Initial value for peak energy
              .initial_fwhm   # Initial value for FWHM.  This can be zero if
                                  #   .fwhm_flag is 0
@@ -364,9 +370,9 @@ def fitPeaks(fit, peaks, observed):
    for peak in peaks:
        chan = ((peak.energy - fit.energy_offset)/fit.energy_slope)
        if ((chan < 0) or (chan > fit.nchans-1)):
-           peak.ampl_factor = -1.
-           peak.energy_flag = 0
-           peak.fwhm_flag = 2
+          peak.ignore = 1
+       else:
+          peak.ignore = 0
 
    # Maximum number of parameters
    max_params=fit.npeaks*3 + 4
@@ -429,7 +435,7 @@ def fitPeaks(fit, peaks, observed):
            # Don't correct for FWHM here, this is just initial value
            peak.ampl = last_opt_peak.ampl * peak.ampl_factor
            parinfo[np]['fixed']=1
-       elif (peak.ampl_factor == -1.):
+       if (peak.ignore == 1):
            peak.ampl = 0.
            parinfo[np]['fixed']=1
        parinfo[np]['value'] = peak.ampl
