@@ -1,3 +1,10 @@
+"""
+Creates a GUI window to calibrate energy for an Mca.
+
+Author:         Mark Rivers
+Created:        Sept. 18, 2002
+Modifications:
+"""
 from Tkinter import *
 import copy
 import tkMessageBox
@@ -11,6 +18,7 @@ import BltPlot
 
 ############################################################
 class mcaCalibrateEnergy_widgets:
+   """ Private class """
    def __init__(self, nrois):
       self.use_flag             = range(nrois)
       self.centroid             = range(nrois)
@@ -21,6 +29,39 @@ class mcaCalibrateEnergy_widgets:
 
 class mcaCalibrateEnergy:
    def __init__(self, mca, command=None):
+      """
+      Creates a new GUI window for calibrating energy for an Mca object.
+
+      Inputs:
+         mca:
+            An Mca instance to be calibrated.  The Mca must have at least 2
+            Regions of Interest (ROIs) defined for a linear calibration and
+            2 ROIs defined for a quadratic calibration.
+
+      Keywords:
+         command:
+            A callback command that will be executed if the OK button on
+            the GUI window is pressed.  The callback will be invoked as:
+               command(exit_status)
+            where exit_status is 1 if OK was pressed, and 0 if Cancel was
+            pressed or the window was closed with the window manager.
+
+      Procedure:
+         The calibration is done by determining the centroid position and
+         energy of each ROI.
+
+         The centroids positions are computed by fitting the
+         ROI counts to a Gaussian, using CARSMath.fit_gaussian.
+
+         The energy the ROI can be entered manually in the GUI window, or it
+         can be determined automatically if the label of the ROI can be
+         successfully used in Xrf.lookup_xrf_line() or Xrf.lookup_gamma_line().
+
+         Each ROI can be selectively used or omitted when doing the calibration.
+
+         The errors in the energy calibration and the FWHM of each ROI as a
+         function of energy, can be plotted using BltPlot.
+      """
       self.input_mca = mca
       self.mca = copy.copy(mca)
       self.exit_command = command
@@ -155,6 +196,7 @@ class mcaCalibrateEnergy:
       t.pack(side=LEFT)
 
    def menu_plot_calibration(self):
+      """ Private method """
       energy = []
       energy_diff = []
       energy_use = []
@@ -176,6 +218,7 @@ class mcaCalibrateEnergy:
               label='Points used')
 
    def menu_plot_fwhm(self):
+      """ Private method """
       energy = []
       fwhm = []
       for i in range(self.nrois):
@@ -186,28 +229,33 @@ class mcaCalibrateEnergy:
                    xtitle='Energy', ytitle='FWHM')
 
    def menu_energy(self, roi):
+      """ Private method """
       energy = float(self.widgets.energy[roi].get())
       self.roi[roi].energy = energy
       self.widgets.energy[roi].setentry('%.3f' % energy)
 
    def menu_centroid(self, roi):
+      """ Private method """
       centroid = float(self.widgets.centroid[roi].get())
       self.roi[roi].centroid = centroid
       self.widgets.centroid[roi].setentry('%.3f' % centroid)
 
    def menu_use(self, value, roi):
+      """ Private method """
       self.roi[roi].use = (value == 'Yes')
 
    def menu_line(self, roi):
-       line = self.widgets.line[roi].get()
-       energy = Xrf.lookup_xrf_line(line)
-       if (energy == None):
-          energy = Xrf.lookup_gamma_line(line)
-       if (energy != None): 
-          self.roi[roi].energy = energy
-          self.widgets.energy[roi].setentry('%.3f' % energy)
+      """ Private method """
+      line = self.widgets.line[roi].get()
+      energy = Xrf.lookup_xrf_line(line)
+      if (energy == None):
+         energy = Xrf.lookup_gamma_line(line)
+      if (energy != None): 
+         self.roi[roi].energy = energy
+         self.widgets.energy[roi].setentry('%.3f' % energy)
 
    def menu_do_fit(self):
+      """ Private method """
       degree = self.widgets.fit_type.index(
                                 self.widgets.fit_type.getcurselection()) + 1
       use = []
@@ -251,6 +299,7 @@ class mcaCalibrateEnergy:
          self.widgets.fwhm[i].configure(text=('%.3f' % self.roi[i].fwhm))
 
    def menu_ok_cancel(self, button):
+      """ Private method """
       if (button == 'OK') or (button == 'Apply'):
          # Copy calibration and rois to input mca object
          self.input_mca.set_calibration(self.calibration)
