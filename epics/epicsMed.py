@@ -3,7 +3,7 @@ import Med
 import Mca
 import epicsMca
 import Xrf
-from epicsPV import epicsPV
+import epicsPV
 
 ############################################################################
 class epicsMed(Med.Med):
@@ -48,21 +48,21 @@ class epicsMed(Med.Med):
          pass
       self.pvs = pvs()
       t = Med.Med.__init__(self, n_detectors)  # Invoke base class initialization
-      self.pvs.start = epicsPV(prefix + 'StartAll', wait=0)
-      self.pvs.erasestart = epicsPV(prefix + 'EraseStart', wait=0)
-      self.pvs.stop  = epicsPV(prefix + 'StopAll', wait=0)
-      self.pvs.erase = epicsPV(prefix + 'EraseAll', wait=0)
-      self.pvs.read  = epicsPV(prefix + 'ReadAll', wait=0)
-      self.pvs.elive  = epicsPV(prefix + 'ElapsedLive', wait=0)
-      self.pvs.ereal  = epicsPV(prefix + 'ElapsedReal', wait=0)
-      self.pvs.plive  = epicsPV(prefix + 'PresetLive', wait=0)
-      self.pvs.preal  = epicsPV(prefix + 'PresetReal', wait=0)
-      self.pvs.dwell  = epicsPV(prefix + 'Dwell', wait=0)
-      self.pvs.channel_advance  = epicsPV(prefix + 'ChannelAdvance', wait=0)
-      self.pvs.prescale  = epicsPV(prefix + 'Prescale', wait=0)
-      self.pvs.acquiring  = epicsPV(prefix + 'Acquiring', wait=0)
-      self.pvs.client_wait  = epicsPV(prefix + 'ClientWait', wait=0)
-      self.pvs.enable_client_wait  = epicsPV(prefix + 'EnableClientWait', wait=0)
+      self.pvs.start = epicsPV.epicsPV(prefix + 'StartAll', wait=0)
+      self.pvs.erasestart = epicsPV.epicsPV(prefix + 'EraseStart', wait=0)
+      self.pvs.stop  = epicsPV.epicsPV(prefix + 'StopAll', wait=0)
+      self.pvs.erase = epicsPV.epicsPV(prefix + 'EraseAll', wait=0)
+      self.pvs.read  = epicsPV.epicsPV(prefix + 'ReadAll', wait=0)
+      self.pvs.elive  = epicsPV.epicsPV(prefix + 'ElapsedLive', wait=0)
+      self.pvs.ereal  = epicsPV.epicsPV(prefix + 'ElapsedReal', wait=0)
+      self.pvs.plive  = epicsPV.epicsPV(prefix + 'PresetLive', wait=0)
+      self.pvs.preal  = epicsPV.epicsPV(prefix + 'PresetReal', wait=0)
+      self.pvs.dwell  = epicsPV.epicsPV(prefix + 'Dwell', wait=0)
+      self.pvs.channel_advance  = epicsPV.epicsPV(prefix + 'ChannelAdvance', wait=0)
+      self.pvs.prescale  = epicsPV.epicsPV(prefix + 'Prescale', wait=0)
+      self.pvs.acquiring  = epicsPV.epicsPV(prefix + 'Acquiring', wait=0)
+      self.pvs.client_wait  = epicsPV.epicsPV(prefix + 'ClientWait', wait=0)
+      self.pvs.enable_client_wait  = epicsPV.epicsPV(prefix + 'EnableClientWait', wait=0)
       good_detectors = range(1, self.n_detectors+1)
       if (bad != None):
          for b in bad:
@@ -242,7 +242,7 @@ class epicsMed(Med.Med):
       self.pvs.enable_client_wait.putw(1)
 
       # Create PV for scan record executing
-      scanPV = epicsPV(scan_record + '.EXSC')
+      scanPV = epicsPV.epicsPV(scan_record + '.EXSC')
       # Wait for scan to start
       while (scanPV.getw() == 0):
          time.sleep(.1)
