@@ -77,7 +77,7 @@ class epicsMed(Med.Med):
       self.pvs.acquiring.setMonitor()
       self.pvs.client_wait.setMonitor()
       # Wait for all PVs to connect
-      self.pvs.client_wait.pend_io()
+      self.pvs.client_wait.pend_io(30.)
       # Read the first MCA to get the number of channels
       t = self.mcas[0].get_data()
       # Read the environment from the first MCA
@@ -110,7 +110,7 @@ class epicsMed(Med.Med):
       the Med.  It then calls Med.copy_rois.
       """
       detector = self.good_detectors.index(detector-1) + 1
-      Med.Med.copy_rois(detector, energy=energy)
+      Med.Med.copy_rois(self, detector, energy=energy)
 
 
    ############################################################################
@@ -208,7 +208,7 @@ class epicsMed(Med.Med):
 
    #######################################################################
    def write_file(self, file):
-      Mca.write_file(self, file)
+      Mca.Mca.write_file(self, file)
       # Reset the client wait flag in case it is set.
       self.pvs.client_wait.putw(0)
 
