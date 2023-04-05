@@ -5,17 +5,20 @@ Author:         Mark Rivers
 Created:        Sept. 18, 2002
 Modifications:  MLR, Sept. 20, 2002.  Numerous bug fixes.
 """
-from Tkinter import *
+# from Tkinter import *
+from tkinter import *
 import copy
-import tkMessageBox
+# import tkMessageBox
+from tkinter import messagebox as tkMessageBox
 import Pmw
 import Mca
-import Numeric
+# import Numeric
+import numpy as Numeric
 import math
 import CARSMath
 import BltPlot
 import jcpds
-import MLab
+# import MLab # Tryin with numpy instead (05/04/2023)
 
 ############################################################
 class mcaCalibrate2theta_widgets:
@@ -253,8 +256,10 @@ class mcaCalibrate2theta:
       two_theta=[]
       for u in use:
          two_theta.append(self.two_theta[u])
-      self.calibration.two_theta = MLab.mean(two_theta)
-      sdev = MLab.std(two_theta)
+      # self.calibration.two_theta = MLab.mean(two_theta)
+      self.calibration.two_theta = Numeric.mean(two_theta)
+      # sdev = MLab.std(two_theta)
+      sdev = Numeric.std(two_theta)
       self.widgets.two_theta_fit.setentry(
                                  ('%.5f' % self.calibration.two_theta)
                                  + ' +- ' + ('%.5f' % sdev))

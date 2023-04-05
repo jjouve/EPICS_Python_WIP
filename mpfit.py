@@ -401,10 +401,8 @@ Perform Levenberg-Marquardt least-squares minimization, based on MINPACK-1.
    August, 2002.  Mark Rivers
 """
 
-try:
-   import Numeric
-except:
-   from numpy import oldnumeric as Numeric
+# import Numeric
+import numpy as Numeric
 import types
 
 

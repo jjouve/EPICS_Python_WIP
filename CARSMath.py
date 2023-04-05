@@ -18,10 +18,10 @@ from apply import apply
    import Numeric
 except:
    from numpy import oldnumeric as Numeric """
-try:
+""" try:
    import LinearAlgebra
 except:
-   from numpy.linalg import inv as LinearAlgebra
+   from numpy.linalg import inv as LinearAlgebra """
 
 ############################################################
 def polyfitw(x, y, w, ndegree, return_fit=0):
@@ -82,7 +82,7 @@ def polyfitw(x, y, w, ndegree, return_fit=0):
       for j in range(max(0,(p-ndegree)), min(ndegree,p)+1):
          a[j,p-j] = sum
 
-   a = LinearAlgebra.inverse(a)
+   a = Numeric.linalg.inv(a)
    c = Numeric.matrixmultiply(b, a)
    if (return_fit == 0):
       return c     # exit if only fit coefficients are wanted

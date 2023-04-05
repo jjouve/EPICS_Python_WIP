@@ -20,10 +20,8 @@ Modifications:
       - Fixed serious bug in .d_to_channel()
 """
 
-try:
-   import Numeric
-except:
-   from numpy import oldnumeric as Numeric
+import numpy as Numeric
+# import Numeric
 import string
 import copy
 import math
@@ -512,7 +510,7 @@ class Mca:
          total_counts = self.data[left:right+1]
          total.append(sum(total_counts))
          n_sel        = right - left + 1
-         bgd_counts   = bgd_left + Numeric.arange(n_sel,Float)/(n_sel-1) * \
+         bgd_counts   = bgd_left + Numeric.arange(n_sel,float)/(n_sel-1) * \
                                   (bgd_right - bgd_left)
          net_counts   = total_counts - bgd_counts
          net.append(sum(net_counts))

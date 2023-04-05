@@ -245,9 +245,9 @@ class jcpds:
       for r in refl:
          diff = abs(r.d0 - r.d) / r.d0
          if (diff > .001):
-            print 'Reflection ', r.h, r.k, r.l, \
+            print('Reflection ', r.h, r.k, r.l, \
                      ': calculated D ', r.d, \
-                     ') differs by more than 0.1% from input D (', r.d0, ')'
+                     ') differs by more than 0.1% from input D (', r.d0, ')')
  
  
    def write_file(self, file):
@@ -394,10 +394,10 @@ class jcpds:
       self.k0p = self.k0p0 + self.dk0pdt*(temperature-298.)
 
       if (pressure == 0.):
-       	 self.v = self.v0 * (1 + self.alphat*(temperature-298.))
+         self.v = self.v0 * (1 + self.alphat*(temperature-298.))
       else:
          if (self.k0 <= 0.):
-            print 'K0 is zero, computing zero pressure volume'
+            print('K0 is zero, computing zero pressure volume')
             self.v = self.v0
          else:
             self.mod_pressure = pressure - \
@@ -529,7 +529,7 @@ class jcpds:
                                                            math.cos(beta))
             d2inv = (s11 * h**2 + s22 * k**2 + s33 * l**2 + 
                     2.*s12*h*k + 2.*s23*k*l + 2.*s31*l*h) / V**2
-         else:   print 'Unknown crystal symmetry = ' + self.symmetry
+         else:   print('Unknown crystal symmetry = ' + self.symmetry)
          r.d = math.sqrt(1./d2inv)
 
    def get_reflections(self):

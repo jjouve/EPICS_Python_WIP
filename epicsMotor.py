@@ -6,8 +6,12 @@ Created:        Sept. 16, 2002
 Modifications:
 """
 
+import time
 import epicsPV
-import exceptions
+try:
+   import exceptions
+except:
+   pass
 
 class epicsMotor:
    """
@@ -169,13 +173,13 @@ class epicsMotor:
    def check_limits(self):
       limit = self.pvs['lvio'].getw()
       if (limit!=0): 
-         raise epicsMotorException, 'Soft limit violation'
+         raise epicsMotorException('Soft limit violation')
       limit = self.pvs['lls'].getw()
       if (limit!=0): 
-         raise epicsMotorException, 'Low hard limit violation'
+         raise epicsMotorException('Low hard limit violation')
       limit = self.pvs['hls'].getw()
       if (limit!=0): 
-         raise epicsMotorException, 'High hard limit violation'
+         raise epicsMotorException('High hard limit violation')
 
    
    def stop(self):

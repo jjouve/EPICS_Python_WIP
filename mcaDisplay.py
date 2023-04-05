@@ -18,31 +18,21 @@ Modifications:
 """
 import os
 import math
-try:
-   import cPickle
-except:
-   import _pickle as cPickle
+# import cPickle
+import pickle as cPickle
 import numpy as np
 """ try:
    import Numeric
 except:
    import oldnumeric as Numeric """
-try:
-   from Tkinter import *
-except:
-   from tkinter import *
-try:
-   import tkFileDialog
-except:
-   from tkinter import filedialog as tkFileDialog
-try:
-   import tkMessageBox
-except:
-   from tkinter import messagebox as tkMessageBox
-try:
-   import tkSimpleDialog
-except:
-   from tkinter import simpledialog as tkSimpleDialog
+# from Tkinter import *
+from tkinter import *
+# import tkFileDialog
+from tkinter import filedialog as tkFileDialog
+# import tkMessageBox
+from tkinter import messagebox as tkMessageBox
+# import tkSimpleDialog
+from tkinter import simpledialog as tkSimpleDialog
 import Pmw  
 import Mca
 import Med

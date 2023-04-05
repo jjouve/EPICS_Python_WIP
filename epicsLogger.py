@@ -8,10 +8,12 @@ Revision history: Original version was written in IDL, called EPICS_LOGGER.PRO,
                   on July 10, 1999.
 
 """
-from Tkinter import *
+# from Tkinter import *
+from tkinter import *
 import Pmw
 import epicsPV
-import tkFileDialog
+# import tkFileDialog
+from tkinter import filedialog as tkFileDialog
 
 class epicsLogger:
    """ 

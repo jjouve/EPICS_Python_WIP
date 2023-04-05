@@ -1,4 +1,5 @@
-import Tkinter
+# import Tkinter
+import tkinter as Tkinter
 def myTkTop():
    """
    This routine creates a Tk() top-level widget and iconifies it.

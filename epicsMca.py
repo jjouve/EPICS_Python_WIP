@@ -16,7 +16,8 @@ Revision history: Original version was written in IDL
 import os
 import string
 import time
-import Numeric
+# import Numeric
+import numpy as Numeric
 import epicsPV
 import Mca
 import Xrf
@@ -638,5 +639,5 @@ class epicsMca(Mca.Mca):
  
          # Write file.  This will reset the client wait flag.
          self.write_file(file)
-         print 'Saved file: ', file
+         print('Saved file: ', file)
          file = Xrf.increment_filename(file)

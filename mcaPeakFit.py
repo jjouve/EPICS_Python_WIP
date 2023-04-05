@@ -13,10 +13,14 @@ Modifications:
 """
 import copy
 import math
-from Tkinter import *
-import tkFileDialog
+# from Tkinter import *
+from tkinter import *
+""" import tkFileDialog
 import tkMessageBox
-import tkSimpleDialog
+import tkSimpleDialog """
+from tkinter import filedialog as tkFileDialog
+from tkinter import messagebox as tkMessageBox
+from tkinter import simpledialog as tkSimpleDialog
 import Pmw
 import Mca
 import Xrf

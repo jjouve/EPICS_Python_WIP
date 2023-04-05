@@ -26,12 +26,17 @@ Modifications:
                       external file (available formats: gif, ppm, and also
                       png and jpg if Python Image library is available).
 """
-from Tkinter import *
-import tkColorChooser
-import tkFileDialog
+from apply import apply
+#from Tkinter import *
+from tkinter import *
+# import tkColorChooser
+from tkinter import colorchooser as tkColorChooser
+# import tkFileDialog
+from tkinter import filedialog as tkFileDialog
 import Pmw
 import os
-import cPickle
+# import cPickle
+import pickle as cPickle
 import myTkTop
 
 ########################################################################
@@ -1294,7 +1299,8 @@ def BltExport(graph, master, file=None, format=None):
    ImgForms = {'gif':None, 'ppm': None}
 
    try:   # if we can import Image, add png and jpg image types
-      import Image
+      # import Image
+      from PIL import Image
       Image_open = Image.open
       ImgForms.update({ 'png':'PNG', 'jpg':'JPEG', 'jpeg':'JPEG'})
       # these image require Image extension and a temporary file

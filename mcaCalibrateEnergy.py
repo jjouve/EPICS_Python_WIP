@@ -5,12 +5,15 @@ Author:         Mark Rivers
 Created:        Sept. 18, 2002
 Modifications:
 """
-from Tkinter import *
+# from Tkinter import *
+from tkinter import *
 import copy
-import tkMessageBox
+# import tkMessageBox
+from tkinter import messagebox as tkMessageBox
 import Pmw
 import Mca
-import Numeric
+# import Numeric
+import numpy as Numeric
 import math
 import Xrf
 import CARSMath

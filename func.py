@@ -57,7 +57,7 @@ class FuncOps:
 		return BinCompose(np.power, self, f)
 
 	def __coerce__(self, x):
-		if type(x) in [int, float, long, complex]:
+		if type(x) in [int, float, complex]:
 			return (self, UnConstant(x))
 		else:
 			return (self, x)

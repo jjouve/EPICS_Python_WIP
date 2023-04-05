@@ -15,8 +15,10 @@ Modifications:
       - Changed default file extension for saving files from ".xrf" to nothing.
 """
 
-from Tkinter import *
-import tkFileDialog
+# from Tkinter import *
+from tkinter import *
+# import tkFileDialog
+from tkinter import filedialog as tkFileDialog
 import Pmw
 import os
 import mcaDisplay

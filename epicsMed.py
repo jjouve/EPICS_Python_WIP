@@ -259,5 +259,5 @@ class epicsMed(Med.Med):
 
          # Write file.  This resets the client wait flag
          self.write_file(file)
-         print 'Saved file: ', file
+         print('Saved file: ', file)
          file = Xrf.increment_filename(file)

@@ -5,7 +5,8 @@ Author:         Mark Rivers
 Created:        Sept. 18, 2002
 Modifications:
 """
-from Tkinter import *
+# from Tkinter import *
+from tkinter import *
 import Pmw
  
 class mcaControlPresets:
