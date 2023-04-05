@@ -18,13 +18,32 @@ Modifications:
 """
 import os
 import math
-import cPickle
-import Numeric
-from Tkinter import *
-import tkFileDialog
-import tkMessageBox
-import tkSimpleDialog
-import Pmw
+try:
+   import cPickle
+except:
+   import _pickle as cPickle
+import numpy as np
+""" try:
+   import Numeric
+except:
+   import oldnumeric as Numeric """
+try:
+   from Tkinter import *
+except:
+   from tkinter import *
+try:
+   import tkFileDialog
+except:
+   from tkinter import filedialog as tkFileDialog
+try:
+   import tkMessageBox
+except:
+   from tkinter import messagebox as tkMessageBox
+try:
+   import tkSimpleDialog
+except:
+   from tkinter import simpledialog as tkSimpleDialog
+import Pmw  
 import Mca
 import Med
 import hardwareMca
@@ -1121,16 +1140,16 @@ class mcaDisplay:
       left = self.display.lmarker
       right = self.display.rmarker
       total_counts = self.foreground.data[left:right+1]
-      tot  = int(Numeric.sum(total_counts))
+      tot  = int(np.sum(total_counts))
       n_sel        = right - left + 1
-      sel_chans    = left + Numeric.arange(n_sel)
+      sel_chans    = left + np.arange(n_sel)
       left_counts  = self.foreground.data[left]
       right_counts = self.foreground.data[right]
-      bgd_counts   = left_counts + (Numeric.arange(n_sel)/(n_sel-1) *
+      bgd_counts   = left_counts + (np.arange(n_sel)/(n_sel-1) *
                                    (right_counts - left_counts))
-      bgd = int(Numeric.sum(bgd_counts))
+      bgd = int(np.sum(bgd_counts))
       net_counts   = total_counts - bgd_counts
-      net          = Numeric.sum(net_counts)
+      net          = np.sum(net_counts)
 
       self.display.current_counts = tot
       self.display.current_bgd = bgd
@@ -1450,7 +1469,7 @@ class mcaDisplay:
                data = med.get_data(total=1, align=1)
                mca.set_data(data)
          self.open(mca, file, background=background)
-      except IOError, e:
+      except IOError(e):
          if (background != 0):
             self.background.valid=0
             self.background.is_detector=0
@@ -1517,7 +1536,7 @@ class mcaDisplay:
 
       try:
          self.foreground.mca.write_file(file)
-      except Exception, e:
+      except Exception(e):
          reply = tkMessageBox.showerror(title='mcaDisplay error',
                message = 'Unable to open file: ' + file + ' ' + e)
          return

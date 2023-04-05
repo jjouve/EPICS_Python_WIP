@@ -401,7 +401,10 @@ Perform Levenberg-Marquardt least-squares minimization, based on MINPACK-1.
    August, 2002.  Mark Rivers
 """
 
-import Numeric
+try:
+   import Numeric
+except:
+   from numpy import oldnumeric as Numeric
 import types
 
 
@@ -1341,7 +1344,7 @@ Keywords:
                       quiet=0, iterstop=None, parinfo=None, 
                       format=None, pformat='%.10g', dof=1):
 
-      if (self.debug): print 'Entering defiter...'
+      if (self.debug): print('Entering defiter...')
       if (quiet): return
       if (fnorm == None):
          [status, fvec] = self.call(fcn, x, functkw)
@@ -1349,7 +1352,7 @@ Keywords:
 
       ## Determine which parameters to print
       nprint = len(x)
-      print "Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof)
+      print("Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof))
       for i in range(nprint):
          if (parinfo != None) and (parinfo[i].has_key('parname')):
             p = '   ' + parinfo[i]['parname'] + ' = '
@@ -1360,7 +1363,7 @@ Keywords:
          else:
             iprint = 1
          if (iprint):
-            print p + (pformat % x[i]) + '  '
+            print(p + (pformat % x[i]) + '  ')
       return(0)
 
    ##  DO_ITERSTOP:
@@ -1382,7 +1385,7 @@ Keywords:
 
    ## Procedure to parse the parameter values in PARINFO, which is a list of dictionaries
    def parinfo(self, parinfo=None, key='a', default=None, n=0):
-      if (self.debug): print 'Entering parinfo...'
+      if (self.debug): print('Entering parinfo...')
       if (n == 0) and (parinfo != None): n = len(parinfo)
       if (n == 0):
          values = default
@@ -1408,7 +1411,7 @@ Keywords:
    ## Call user function or procedure, with _EXTRA or not, with
    ## derivatives or not.
    def call(self, fcn, x, functkw, fjac=None):
-      if (self.debug): print 'Entering call...'
+      if (self.debug): print('Entering call...')
       if (self.qanytied): x = self.tie(x, self.ptied)
       self.nfev = self.nfev + 1
       if (fjac == None):
@@ -1425,7 +1428,7 @@ Keywords:
 
    def enorm(self, vec):
 
-        if (self.debug): print 'Entering enorm...'
+        if (self.debug): print('Entering enorm...')
         ## NOTE: it turns out that, for systems that have a lot of data
         ## points, this routine is a big computing bottleneck.  The extended
         ## computations that need to be done cannot be effectively
@@ -1458,7 +1461,7 @@ Keywords:
               epsfcn=None, autoderivative=1,
               functkw=None, xall=None, ifree=None, dstep=None):
 
-      if (self.debug): print 'Entering fdjac2...'
+      if (self.debug): print('Entering fdjac2...')
       machep = self.machar.machep
       if epsfcn == None:  epsfcn = machep
       if xall == None:    xall = x
@@ -1478,7 +1481,7 @@ Keywords:
          [status, fp] = self.call(fcn, xall, functkw, fjac=fjac)
 
          if len(fjac) != m*nall:
-             print 'ERROR: Derivative matrix was not computed properly.'
+             print('ERROR: Derivative matrix was not computed properly.')
              return(None)
 
          ## This definition is c1onsistent with CURVEFIT
@@ -1670,7 +1673,7 @@ Keywords:
 
    def qrfac(self, a, pivot=0):
 
-      if (self.debug): print 'Entering qrfac...'
+      if (self.debug): print('Entering qrfac...')
       machep = self.machar.machep
       sz = Numeric.shape(a)
       m = sz[0]
@@ -1822,7 +1825,7 @@ Keywords:
    #
    
    def qrsolv(self, r, ipvt, diag, qtb, sdiag):
-      if (self.debug): print 'Entering qrsolv...'
+      if (self.debug): print('Entering qrsolv...')
       sz = Numeric.shape(r)
       m = sz[0]
       n = sz[1]
@@ -1991,7 +1994,7 @@ Keywords:
    
    def lmpar(self, r, ipvt, diag, qtb, delta, x, sdiag, par=None):
 
-      if (self.debug): print 'Entering lmpar...'
+      if (self.debug): print('Entering lmpar...')
       dwarf = self.machar.minnum
       sz = Numeric.shape(r)
       m = sz[0]
@@ -2098,7 +2101,7 @@ Keywords:
    
    ## Procedure to tie one parameter to another.
    def tie(self, p, ptied=None):
-      if (self.debug): print 'Entering tie...'
+      if (self.debug): print('Entering tie...')
       if (ptied == None): return
       for i in range(len(ptied)):
          if ptied[i] == '': continue
@@ -2176,14 +2179,14 @@ Keywords:
    
    def calc_covar(self, rr, ipvt=None, tol=1.e-14):
 
-      if (self.debug): print 'Entering calc_covar...'
+      if (self.debug): print('Entering calc_covar...')
       if Numeric.rank(rr) != 2:
-         print 'ERROR: r must be a two-dimensional matrix'
+         print('ERROR: r must be a two-dimensional matrix')
          return(-1)
       s = Numeric.shape(rr)
       n = s[0]
       if s[0] != s[1]:
-         print 'ERROR: r must be a square matrix'
+         print('ERROR: r must be a square matrix')
          return(-1)
 
       if (ipvt == None): ipvt = Numeric.arange(n)

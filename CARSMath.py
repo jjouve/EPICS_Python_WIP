@@ -12,9 +12,16 @@ Modifications:
       - Added newton function from scipy.optimize.  Put here so users don't
         need scipy
 """
-
-import Numeric
-import LinearAlgebra
+import numpy as Numeric
+from apply import apply
+""" try:
+   import Numeric
+except:
+   from numpy import oldnumeric as Numeric """
+try:
+   import LinearAlgebra
+except:
+   from numpy.linalg import inv as LinearAlgebra
 
 ############################################################
 def polyfitw(x, y, w, ndegree, return_fit=0):
@@ -150,7 +157,7 @@ def compress_array(array, compress):
 
    l = len(array)
    if ((l % compress) != 0):
-      print 'Compression must be integer divisor of array length'
+      print('Compression must be integer divisor of array length')
       return array
 
    temp = Numeric.resize(array, (l/compress, compress))
@@ -198,7 +205,7 @@ def newton(func, x0, fprime=None, args=(), tol=1.48e-8, maxiter=50):
             fval = func(*myargs)
             fpval = fprime(*myargs)
             if fpval == 0:
-                print "Warning: zero-derivative encountered."
+                print("Warning: zero-derivative encountered.")
                 return p0
             p = p0 - func(*myargs)/fprime(*myargs)
             if abs(p-p0) < tol:
@@ -214,7 +221,7 @@ def newton(func, x0, fprime=None, args=(), tol=1.48e-8, maxiter=50):
                 p = p1 - q1*(p1-p0)/(q1-q0)
             except ZeroDivisionError:
                 if p1 != p0:
-                    print "Tolerance of %g reached" % (p1-p0)
+                    print("Tolerance of %g reached" % (p1-p0))
                 return (p1+p0)/2.0
             if abs(p-p0) < tol:
                 return p
@@ -222,5 +229,5 @@ def newton(func, x0, fprime=None, args=(), tol=1.48e-8, maxiter=50):
             q0 = q1
             p1 = p
             q1 = apply(func,(p1,)+args)
-    raise RuntimeError, "Failed to converge after %d iterations, value is %f" % (maxiter,p)
+    raise RuntimeError("Failed to converge after %d iterations, value is %f" % (maxiter,p))
 

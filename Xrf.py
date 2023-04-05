@@ -6,8 +6,11 @@
 #   Modifications:
 
 import os
-import exceptions
-class XrfError(exceptions.Exception):
+try:
+   import exceptions
+except:
+   pass
+class XrfError(Exception):
    def __init__(self, args=None):
       self.args=args
 
@@ -135,7 +138,7 @@ def lookup_xrf_line(xrf_line):
       xrf_dict = {}
       file = os.getenv('XRF_PEAK_LIBRARY')
       if (file == None):
-         raise XrfError, 'XRF_PEAK_LIBRARY environment variable not defined'
+         raise XrfError('XRF_PEAK_LIBRARY environment variable not defined')
       try:
          fp = open(file,'r')
          line = fp.readline()
@@ -153,7 +156,7 @@ def lookup_xrf_line(xrf_line):
             xrf_dict[s] = e
          fp.close()
       except:
-         raise XrfError, 'Error reading XRF_PEAK_LIBRARY file'
+         raise XrfError('Error reading XRF_PEAK_LIBRARY file')
 
    try:
       words = xrf_line.split()

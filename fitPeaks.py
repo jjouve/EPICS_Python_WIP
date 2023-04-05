@@ -31,7 +31,11 @@ Modification history:
         peak was outside the energy range of the spectrum.  Added new .ignore
         field to McaPeak to work around this problem and use that field here.
 """
-import Numeric
+import numpy as Numeric
+""" try:
+   import Numeric
+except:
+   from numpy import oldnumeric as Numeric """
 import mpfit
 
 def mpfit_peaks(parameters, fjac, observed=None, weights=None,
@@ -451,7 +455,7 @@ def fitPeaks(fit, peaks, observed):
               'fit': fit, 'peaks': peaks}
    m = mpfit.mpfit(mpfit_peaks, parinfo=parinfo, functkw=functkw, 
                    quiet=1, xtol=fit.tolerance, maxiter=fit.max_iter)
-   if (m.status <= 0): print m.errmsg
+   if (m.status <= 0): print(m.errmsg)
    # Copy optimized results back
    [fit, peaks] = copy_fit_params(m.params, fit, peaks)
    predicted = predict_gaussian_spectrum(fit, peaks)

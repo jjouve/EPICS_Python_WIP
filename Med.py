@@ -6,7 +6,11 @@ Created:       Sept. 18, 2002.  Based on earlier IDL code.
 Modifications:
 """
 import Mca
-import Numeric
+import numpy as Numeric
+""" try:
+   import Numeric
+except:
+   from numpy import oldnumeric as Numeric """
 import spline
 
 #########################################################################

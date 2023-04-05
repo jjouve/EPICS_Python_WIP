@@ -20,7 +20,10 @@ Modifications:
       - Fixed serious bug in .d_to_channel()
 """
 
-import Numeric
+try:
+   import Numeric
+except:
+   from numpy import oldnumeric as Numeric
 import string
 import copy
 import math
@@ -1593,10 +1596,10 @@ def read_ascii_file(file):
                       rois[d][i].label = string.strip(labels[d])
                 break
          else:
-            print 'Unknown tag = '+tag+' in file: ' + file + '.'
+            print(f'Unknown tag = {tag} in file: {file}.')
 
    # Make sure DATA array is defined, else this was not a valid data file
-   if (data == None): print 'Not a valid data file: ' + file + '.'
+   if (data == None): print('Not a valid data file: {file}.')
    fp.close()
    # Built dictionary to return
    r = {}
