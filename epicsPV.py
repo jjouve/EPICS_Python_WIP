@@ -6,7 +6,7 @@ Author:         Mark Rivers
 Created:        Sept. 16, 2002.
 Modifications:
 """
-import CaChannel
+import caChannel.CaChannel as CaChannel
 
 class epicsPV(CaChannel.CaChannel):
    """
